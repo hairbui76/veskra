@@ -810,13 +810,14 @@
       "deliverable": "Mask ordering/edge semantics, stable undo, reference fixtures",
       "status": "In Verification",
       "evidence": [
-        "Clipping (psd-tools semantics), layer masks, alpha lock in brush"
+        "Clipping (psd-tools semantics), layer masks, alpha lock in brush",
+        "Clipping + layer masks composited (compose), exported (PSD user mask), editable via layer.mask_* commands; alpha lock in brush/fill; engine tests"
       ],
       "blockers": [],
       "notes": [
         "Group masks not in schema yet"
       ],
-      "impl": "partial"
+      "impl": "complete"
     },
     {
       "id": "DOC-04",

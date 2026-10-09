@@ -111,3 +111,37 @@ fn project_save_refuses_interchange_and_ai_extensions() {
     let r = run(&mut s, json!({"cmd": "document.save", "path": ok.to_string_lossy()}));
     assert!(r.get("ok").is_some(), "{r}");
 }
+
+#[test]
+fn layer_mask_from_selection_remove_and_apply() {
+    let mut s = new_session();
+    let px = |s: &Session, x: usize, y: usize| render(s)[(y * 128 + x) * 4 + 3];
+    let id = run(&mut s, json!({"cmd": "document.info"}))["ok"]["activeLayer"].as_str().unwrap().to_string();
+    run(&mut s, json!({"cmd": "color.set", "hex": "#FF0000"}));
+    assert!(run(&mut s, json!({"cmd": "edit.fill_selection"})).get("ok").is_some());
+    run(&mut s, json!({"cmd": "selection.rect", "x0": 0, "y0": 0, "x1": 64, "y1": 96}));
+    let r = run(&mut s, json!({"cmd": "layer.mask_from_selection", "id": id}));
+    assert!(r.get("ok").is_some(), "{r}");
+    assert_eq!(px(&s, 10, 10), 255);
+    assert_eq!(px(&s, 100, 10), 0, "mask hides the unselected half");
+    let list = run(&mut s, json!({"cmd": "layer.list"}));
+    let l = list["ok"]["layers"].as_array().unwrap().iter().find(|l| l["id"] == id.as_str()).unwrap().clone();
+    assert_eq!(l["hasMask"], true);
+    assert_eq!(l["vectorFidelity"], "raster");
+    // remove: pixels come back; undo restores the mask
+    run(&mut s, json!({"cmd": "layer.mask_remove", "id": id}));
+    assert_eq!(px(&s, 100, 10), 255);
+    run(&mut s, json!({"cmd": "history.undo"}));
+    assert_eq!(px(&s, 100, 10), 0);
+    // apply: pixels permanently cut, mask gone, composite unchanged
+    let before = render(&s);
+    run(&mut s, json!({"cmd": "layer.mask_apply", "id": id}));
+    assert_eq!(render(&s), before);
+    run(&mut s, json!({"cmd": "selection.clear"}));
+    let e = run(&mut s, json!({"cmd": "layer.mask_remove", "id": id}));
+    assert_eq!(e["error"]["code"], "InvalidState");
+    // vector layers refuse masks
+    let v = run(&mut s, json!({"cmd": "layer.add", "kind": "vector"}))["ok"]["layerId"].as_str().unwrap().to_string();
+    let e = run(&mut s, json!({"cmd": "layer.mask_from_selection", "id": v}));
+    assert_eq!(e["error"]["code"], "UnsupportedLayerFeature");
+}

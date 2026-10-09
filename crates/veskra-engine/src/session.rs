@@ -423,6 +423,42 @@ impl Session {
             Command::LayerImportImage { path, handling, missing_profile, name, x, y } => {
                 self.import_image(label, &path, handling.as_deref(), missing_profile.as_deref(), name, x, y)
             }
+            Command::LayerMaskFromSelection { id } => {
+                let id = parse_layer(&id)?;
+                let r = self.mutate(label, |d, _| {
+                    require_raster(d, id)?;
+                    let b = d.bounds();
+                    let mask = d.selection.clone().unwrap_or_else(MaskGrid::new_full);
+                    d.pixels_mut_editable(id)?.mask = Some(mask);
+                    Ok((json!({}), b))
+                })?;
+                Ok(self.finish_mutation(r))
+            }
+            Command::LayerMaskRemove { id } => {
+                let id = parse_layer(&id)?;
+                let r = self.mutate(label, |d, _| {
+                    require_raster(d, id)?;
+                    let px = d.pixels_mut_editable(id)?;
+                    if px.mask.take().is_none() {
+                        return Err(VeskraError::new(ErrorCode::InvalidState, "layer has no mask"));
+                    }
+                    Ok((json!({}), d.bounds()))
+                })?;
+                Ok(self.finish_mutation(r))
+            }
+            Command::LayerMaskApply { id } => {
+                let id = parse_layer(&id)?;
+                let r = self.mutate(label, |d, _| {
+                    require_raster(d, id)?;
+                    let px = d.pixels_mut_editable(id)?;
+                    let mask =
+                        px.mask.take().ok_or_else(|| VeskraError::new(ErrorCode::InvalidState, "layer has no mask"))?;
+                    px.tiles = veskra_raster::ops::mask_pixels(&px.tiles, &mask);
+                    d.mark_raster_edit(id, "mask_apply")?;
+                    Ok((json!({}), d.bounds()))
+                })?;
+                Ok(self.finish_mutation(r))
+            }
             Command::LayerClear { id } => {
                 let id = parse_layer(&id)?;
                 let r = self.mutate(label, |d, _| {
@@ -1420,6 +1456,15 @@ impl Session {
         };
         let opts = veskra_compose::ComposeOptions { overrides, ..Default::default() };
         veskra_compose::render_display_rgba8(d, rect, &opts, out)
+    }
+}
+
+/// Masks are raster-only: on a vector-stroke layer they would break exact vector fidelity.
+fn require_raster(d: &Document, id: LayerId) -> EResult<()> {
+    match d.layer(id).map(|l| &l.kind) {
+        Some(LayerKind::Raster(_)) => Ok(()),
+        Some(_) => Err(VeskraError::new(ErrorCode::UnsupportedLayerFeature, "layer masks need a raster layer")),
+        None => Err(VeskraError::new(ErrorCode::NotFound, "layer not found")),
     }
 }
 

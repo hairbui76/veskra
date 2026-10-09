@@ -26,6 +26,7 @@ silent no-op undo step. `invalidated` is guaranteed to cover every display pixel
 | `recovery.open` | `path` | opens one checkpoint; never marked saved |
 | `layer.add` | `kind`: raster\|vector\|group, `name`?, `placement`? | `{layerId}`; non-group becomes active |
 | `layer.remove` / `layer.duplicate` / `layer.clear` | `id` | — / `{layerId}` / — |
+| `layer.mask_from_selection` / `layer.mask_remove` / `layer.mask_apply` | `id` | raster layers only; mask from current selection (whole canvas if none); apply bakes the mask into alpha. A masked layer is `vectorFidelity: raster` |
 | `layer.import_image` | `path`, `handling`?: convert (default) \| assign, `missingProfile`?: assume_srgb (default) \| reject, `name`?, `x`?, `y`? | `{layerId, width, height, sourceProfile, profileAssumed, converted, warnings}`; PNG only; corrupt ICC rejected; assumed profiles reported in `warnings` (COL-004/005) |
 | `layer.move` | `id`, `placement` | rejects cycles |
 | `layer.set` | `id`, `name`?, `visible`?, `opacity`?, `blend`?, `locked`?, `alphaLocked`?, `clip`?, `passThrough`? | one undo step |

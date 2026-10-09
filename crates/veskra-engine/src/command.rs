@@ -162,6 +162,15 @@ pub enum Command {
         #[serde(default)]
         y: i32,
     },
+    /// Add (or replace) a layer mask revealing the current selection (whole canvas if none).
+    #[serde(rename = "layer.mask_from_selection")]
+    LayerMaskFromSelection { id: String },
+    /// Delete a layer mask without changing pixels.
+    #[serde(rename = "layer.mask_remove")]
+    LayerMaskRemove { id: String },
+    /// Bake the mask into the layer's alpha, then delete it.
+    #[serde(rename = "layer.mask_apply")]
+    LayerMaskApply { id: String },
     #[serde(rename = "layer.list")]
     LayerList,
 
@@ -344,6 +353,9 @@ impl Command {
             Command::LayerRename { .. } => "Rename layer",
             Command::LayerClear { .. } => "Clear layer",
             Command::LayerImportImage { .. } => "Import image",
+            Command::LayerMaskFromSelection { .. } => "Add layer mask",
+            Command::LayerMaskRemove { .. } => "Delete layer mask",
+            Command::LayerMaskApply { .. } => "Apply layer mask",
             Command::StrokeCommit => "Stroke",
             Command::SelectionRect { .. }
             | Command::SelectionEllipse { .. }
