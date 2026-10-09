@@ -1,8 +1,36 @@
 # Veskra — Development Handoff Pack
 
-**Created:** 2026-10-10  
-**Status:** Planning documents only — application code has **not** been implemented here.  
+**Created:** 2026-10-10 · **Implementation started:** 2026-10-09 (see `docs/FINAL_REPORT.md`)  
+**Status:** Rust engine, exporters, JNI bridge, CLI and Android shell source exist and are tested on a
+Linux host. **No quality gate (G0–G7) is signed**: Android device, APK build and Adobe application
+evidence are blocked (see `docs/BLOCKERS.md`). Nothing here is a released product.  
 **Mission:** Open-source, offline-first, Rust-powered drawing/painting app for Android tablets with native pen experience, color-managed exports, PSD and Illustrator-compatible SVG/PDF.
+
+## Repository quick start
+
+```sh
+# Rust (toolchain pinned by rust-toolchain.toml)
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+python3 scripts/check_deps.py        # crate layering (ADR-016)
+python3 scripts/progress.py summary  # machine-readable ticket tracker (progress/tickets.json)
+
+# Headless CLI (same engine as Android)
+cargo run --release -p veskra-cli -- benchmark-stroke --size 2048
+cargo run --release -p veskra-cli -- export tests/fixtures/documents/12-layer-illustration.veskra /tmp/out.psd
+
+# Kotlin :kit + real JNI round trip on the host JVM
+cargo build -p veskra-ffi --release
+(cd apps/android && ./gradlew :kit:test -Dveskra.ffi.lib=$PWD/../../target/release/libveskra_ffi.so)
+
+# Independent-oracle interop suite (psd-tools, Krita, Inkscape, rsvg, poppler, LittleCMS)
+bash scripts/interop/run_all.sh
+```
+
+Key documents added during implementation: `docs/CONTRACTS.md` (cross-crate APIs), `docs/COMMANDS.md`
+(engine command API), `adr/` (ADR-001…016), `docs/COMPATIBILITY.md` (feature matrix),
+`docs/BLOCKERS.md`, `docs/reports/` (color, PSD, Illustrator, QA, performance), `docs/FINAL_REPORT.md`.
 
 ## How to use this pack
 
@@ -29,7 +57,7 @@ Assign the ORCH agent the **Prompt 0 — Lead / Orchestrator** from `AGENT_ASSIG
 
 ## What this pack does *not* do
 
-It does not build an APK, contain runnable Veskra source code, grant access to physical Android stylus hardware, or provide Adobe Illustrator/Photoshop test licenses. Those are explicit engineering tasks/gates in the roadmap. Candidate open-source Rust dependencies have not been independently built or endorsed for Veskra.
+It does not (yet) build an APK in the authoring environment, contain runnable Veskra source code, grant access to physical Android stylus hardware, or provide Adobe Illustrator/Photoshop test licenses. Those are explicit engineering tasks/gates in the roadmap. Candidate open-source Rust dependencies have not been independently built or endorsed for Veskra.
 
 ## Suggested repository tree (after initialization)
 
