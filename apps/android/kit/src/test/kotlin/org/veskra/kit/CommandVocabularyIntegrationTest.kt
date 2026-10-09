@@ -59,6 +59,10 @@ class CommandVocabularyIntegrationTest {
             for (p in BrushPreset.entries) exec(h, Commands.brushSelect(p.id))
             exec(h, Commands.brushSet(size = 10f, opacity = 0.9f, flow = 1f, stabilization = 0.2f))
             exec(h, Commands.colorSet(HexColor.BLACK))
+            val png = File(System.getProperty("veskra.repo.root") ?: "../../..", "tests/fixtures/import/untagged_rgb8.png")
+            assertTrue(png.isFile, "import fixture not found at ${png.absolutePath}")
+            val imp = exec(h, Commands.layerImportImage(png.absolutePath)) as JsonObject
+            assertEquals(true, imp.bool("profileAssumed"))
             exec(h, Commands.viewFit())
             exec(h, Commands.viewMirror(true))
             exec(h, Commands.viewMirror(false))

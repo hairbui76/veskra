@@ -71,6 +71,17 @@ object Commands {
 
     fun layerList(): JsonObject = json { "cmd" to "layer.list" }
 
+    /**
+     * Import a PNG (copied from SAF into app-private storage first) as a new raster layer.
+     * [assign] = keep numbers instead of converting colors (COL-005); warnings must be shown.
+     */
+    fun layerImportImage(path: String, assign: Boolean = false, rejectUntagged: Boolean = false): JsonObject = json {
+        "cmd" to "layer.import_image"
+        "path" to path
+        "handling" to (if (assign) "assign" else "convert")
+        "missingProfile" to (if (rejectUntagged) "reject" else "assume_srgb")
+    }
+
     fun historyUndo(): JsonObject = json { "cmd" to "history.undo" }
     fun historyRedo(): JsonObject = json { "cmd" to "history.redo" }
 
