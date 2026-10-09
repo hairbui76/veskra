@@ -145,3 +145,43 @@ fn layer_mask_from_selection_remove_and_apply() {
     let e = run(&mut s, json!({"cmd": "layer.mask_from_selection", "id": v}));
     assert_eq!(e["error"]["code"], "UnsupportedLayerFeature");
 }
+
+/// QA-D1: recovery responses must report the document as unsaved, like `document.info`.
+#[test]
+fn recovery_responses_report_unsaved() {
+    let mut s = new_session();
+    let dir = std::env::temp_dir().join(format!("veskra-recov-{}", std::process::id()));
+    let r = run(&mut s, json!({"cmd": "document.autosave", "dir": dir.to_string_lossy()}));
+    let path = r["ok"]["path"].as_str().unwrap().to_string();
+    for cmd in [
+        json!({"cmd": "document.recover", "dir": dir.to_string_lossy()}),
+        json!({"cmd": "recovery.open", "path": path}),
+    ] {
+        let mut s2 = new_session();
+        let r = run(&mut s2, cmd.clone());
+        assert_eq!(r["ok"]["dirty"], true, "{cmd}: {r}");
+        assert!(r["ok"]["savedVersion"].is_null(), "{cmd}: {r}");
+        assert_eq!(run(&mut s2, json!({"cmd": "document.info"}))["ok"]["dirty"], true);
+    }
+}
+
+/// QA-D2: permission failures on project save are `FilePermissionDenied`, like exports.
+#[cfg(unix)]
+#[test]
+fn save_into_read_only_dir_is_permission_denied() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut s = new_session();
+    let dir = std::env::temp_dir().join(format!("veskra-ro-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let probe = dir.join("probe");
+    let writable_anyway = std::fs::write(&probe, b"x").is_ok(); // running as root ignores modes
+    let _ = std::fs::remove_file(&probe);
+    let r = run(&mut s, json!({"cmd": "document.save", "path": dir.join("a.veskra").to_string_lossy()}));
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    if writable_anyway {
+        eprintln!("NOTE: process can write to a 0555 dir (root); permission mapping checked via unit test only");
+        return;
+    }
+    assert_eq!(r["error"]["code"], "FilePermissionDenied", "{r}");
+}

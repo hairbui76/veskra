@@ -53,6 +53,9 @@ impl FormatError {
             FormatError::InvalidDocument(_) => ErrorCode::InvalidDocument,
             FormatError::InvalidArgument(_) => ErrorCode::InvalidArgument,
             FormatError::StorageFull => ErrorCode::StorageFull,
+            FormatError::Io { kind: io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem, .. } => {
+                ErrorCode::FilePermissionDenied
+            }
             FormatError::Io { .. } => ErrorCode::Io,
         }
     }
@@ -112,5 +115,20 @@ impl fmt::Display for FormatWarning {
             FormatWarning::UnknownEntries { names } => write!(f, "{} unknown entr(ies) ignored", names.len()),
             FormatWarning::Migrated { from, to } => write!(f, "migrated from schema {from} to {to}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn permission_errors_map_to_file_permission_denied() {
+        for kind in [io::ErrorKind::PermissionDenied, io::ErrorKind::ReadOnlyFilesystem] {
+            let e: FormatError = io::Error::new(kind, "denied").into();
+            assert_eq!(e.code(), ErrorCode::FilePermissionDenied);
+        }
+        let e: FormatError = io::Error::new(io::ErrorKind::NotFound, "x").into();
+        assert_eq!(e.code(), ErrorCode::Io);
     }
 }

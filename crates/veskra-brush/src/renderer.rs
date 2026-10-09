@@ -145,6 +145,15 @@ impl Pipeline {
             }
             *dabs += 1;
             let d = preset.diameter(sh.size, q.pressure, q.tilt) as f64;
+            // Cull dabs whose footprint misses the clip (cheap; same pixels as rasterizing them).
+            let r = d / 2.0 + 2.0;
+            if q.x + r < sh.clip.x0 as f64
+                || q.x - r > sh.clip.x1 as f64
+                || q.y + r < sh.clip.y0 as f64
+                || q.y - r > sh.clip.y1 as f64
+            {
+                return;
+            }
             let a = preset.dab_alpha(q.pressure) as f64;
             dirty = dirty.union(&dab::rasterize(cov, q.x, q.y, d / 2.0, a, &sh.style, sh.clip));
         };
@@ -363,7 +372,19 @@ impl StrokeRenderer {
         self.flush();
         let mut tiles = self.base.clone();
         self.composite(&self.pipe.cov, &mut tiles, self.bounds);
-        let geometry = if self.preset.vector_eligible && self.mode == StrokeMode::Paint {
+        // Vector geometry cost grows with path length. A stroke whose paint path leaves the
+        // canvas by more than one canvas size is mostly invisible; it keeps its exact raster
+        // pixels but gets no vector form (reported as raster-only on export, never silently
+        // mis-exported). Bounds the cost of hostile/far-off-canvas input (QA-D3).
+        let clip = self.ctx.clip;
+        let margin = clip.width().max(clip.height()) as f64;
+        let within_reach = self.stab_path.iter().all(|p| {
+            p.x >= clip.x0 as f64 - margin
+                && p.x <= clip.x1 as f64 + margin
+                && p.y >= clip.y0 as f64 - margin
+                && p.y <= clip.y1 as f64 + margin
+        });
+        let geometry = if self.preset.vector_eligible && self.mode == StrokeMode::Paint && within_reach {
             let (preset, size) = (&self.preset, self.shape.size);
             geometry::build(
                 &self.stab_path,

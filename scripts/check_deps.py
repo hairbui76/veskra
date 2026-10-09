@@ -23,6 +23,8 @@ ALLOWED = {
     "veskra-ffi": {"veskra-core", "veskra-engine", "veskra-input"},
     "veskra-cli": {"veskra-core", "veskra-engine", "veskra-io", "veskra-color", "veskra-format", "veskra-compose",
                    "veskra-doc", "veskra-raster", "veskra-testkit", "veskra-input"},
+    "veskra-qa": {"veskra-core", "veskra-engine", "veskra-input", "veskra-format", "veskra-io", "veskra-color",
+                  "veskra-compose", "veskra-doc", "veskra-testkit"},
 }
 # Crates that must never depend on JNI / Android-specific crates.
 FORBIDDEN_EXTERNAL = {"jni", "ndk", "ndk-sys", "android_logger", "android-activity"}

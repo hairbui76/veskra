@@ -179,7 +179,7 @@ fn opener_failure_and_rename_failure_are_typed() {
         Err(io::Error::from(io::ErrorKind::PermissionDenied))
     })
     .unwrap_err();
-    assert_eq!(VeskraError::from(err).code, ErrorCode::Io);
+    assert_eq!(VeskraError::from(err).code, ErrorCode::FilePermissionDenied);
     // Target is a non-empty directory: rename fails, nothing is left behind.
     let blocker = dir.join("dir.veskra");
     fs::create_dir_all(blocker.join("inner")).unwrap();

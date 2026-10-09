@@ -640,6 +640,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "veskra-qa"
+version = "0.1.0"
+dependencies = [
+ "png",
+ "serde_json",
+ "sha2",
+ "veskra-color",
+ "veskra-compose",
+ "veskra-core",
+ "veskra-doc",
+ "veskra-engine",
+ "veskra-format",
+ "veskra-input",
+ "veskra-io",
+ "veskra-testkit",
+]
+
+[[package]]
 name = "veskra-raster"
 version = "0.1.0"
 dependencies = [

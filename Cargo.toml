@@ -14,6 +14,7 @@ members = [
     "crates/veskra-engine",
     "crates/veskra-ffi",
     "crates/veskra-testkit",
+    "crates/veskra-qa",
     "apps/cli",
 ]
 
@@ -36,7 +37,8 @@ miniz_oxide = "0.9.1"
 crc32fast = "1.5.2"
 sha2 = "0.11.0"
 jni = "0.22.4"
-# dev-only independent oracles
+# PNG decoding for hostile-input image import (production, ORCH-approved 2026-10-09) and
+# an independent decoder in tests.
 png = "0.18.1"
 
 veskra-core = { path = "crates/veskra-core" }

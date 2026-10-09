@@ -57,3 +57,25 @@ fn geometry_only_for_vector_eligible_paint() {
     let erased = render(&pen, &samples, 0, filled_base([0, 0, 0, 65535]), ctx(StrokeMode::Erase), &[4]);
     assert!(erased.geometry.is_none(), "erase mode never yields vector geometry");
 }
+
+/// QA-D3: a stroke reaching far beyond the canvas must stay cheap and lose only its vector form.
+#[test]
+fn far_off_canvas_stroke_is_cheap_and_raster_only() {
+    use veskra_brush::{StrokeContext, StrokeMode, StrokeRenderer, builtin_preset};
+    use veskra_core::{ColorRgba, RectI, StrokeSample};
+    use veskra_raster::TileGrid;
+    let p = builtin_preset("pen.technical").unwrap();
+    let mut r = StrokeRenderer::begin(
+        p,
+        ColorRgba::BLACK,
+        1,
+        TileGrid::new(),
+        StrokeContext::new(StrokeMode::Paint, RectI::new(0, 0, 128, 96)),
+    );
+    let t = std::time::Instant::now();
+    r.add_samples(&[StrokeSample::confirmed(10.0, 10.0, 0, 0.5), StrokeSample::confirmed(1.0e6, 10.0, 1000, 0.5)]);
+    let fin = r.finish();
+    assert!(fin.geometry.is_none(), "far off-canvas stroke must not get a vector form");
+    assert!(fin.tiles.get_pixel(60, 10)[3] > 0, "visible part is still painted");
+    assert!(t.elapsed().as_secs_f64() < 1.0, "took {:?}", t.elapsed());
+}

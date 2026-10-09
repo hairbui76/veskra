@@ -1001,11 +1001,15 @@
         "DSN-03"
       ],
       "deliverable": "12-layer colored concept art saved/reopened and edited with correct undo history",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "Headless S2: 12-layer ink/flats/shadows doc, 46-step undo to creation + exact redo, save/reopen identical (veskra-qa scenarios)"
+      ],
+      "blockers": [
+        "UI/device workflow not runnable (B-1/B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "CLR-02",
@@ -1155,11 +1159,13 @@
         "CLR-05"
       ],
       "deliverable": "Known colors, gradients, alpha/mask matrices, CIEDE2000 metrics and CI reports",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "S7: 183 swatches -> PNG -> png crate + Pillow decode dE00=0; color oracle suite (COL-002/003/008)"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "QAP-03",
@@ -1171,11 +1177,15 @@
         "FMT-04"
       ],
       "deliverable": "100-cycle scripted save/interruption tests; no silent lost confirmed checkpoint",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "100-cycle engine save fault matrix (read-only dir, missing dir, dir target, file parent) + tmpfs ENOSPC: original intact, typed errors, dirty kept"
+      ],
+      "blockers": [
+        "Android force-stop/SAF provider cases need a device (B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "INT-03",
@@ -1304,11 +1314,15 @@
         "FMT-09"
       ],
       "deliverable": "Sample PSDs open in current Photoshop and Krita; layer/composite/color logs/screenshots",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "psd-tools/Krita/ImageMagick corpus (docs/reports/psd-interop.md, S3)"
+      ],
+      "blockers": [
+        "Photoshop NOT TESTED (B-3); Krita 5.2.2 ignores PSD clipping/group opacity on import"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-12",
@@ -1597,11 +1611,13 @@
         "FMT-11"
       ],
       "deliverable": "Native/PSD/ICC/SVG fuzz seed corpus, bounded input handling and crash triage",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-qa fuzz_smoke: 180,000 mutated inputs over 9 parsers/boundaries, 0 panics (docs/reports/qa-fuzz.md); seed corpus tests/fuzz-corpus"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "DSN-04",

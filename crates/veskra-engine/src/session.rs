@@ -324,16 +324,20 @@ impl Session {
                     .filter(|c| c.valid)
                     .max_by_key(|c| c.seq)
                     .ok_or_else(|| VeskraError::new(ErrorCode::NotFound, "no valid recovery checkpoint"))?;
-                let r = self.open(&latest.path)?;
+                let mut r = self.open(&latest.path)?;
                 self.saved_version = None;
                 self.doc_path = None;
+                // Recompute: the info inside `r` was produced while the checkpoint looked saved.
+                r.result = self.info()?;
                 Ok(r)
             }
             Command::RecoveryOpen { path } => {
-                let r = self.open(Path::new(&path))?;
+                let mut r = self.open(Path::new(&path))?;
                 // A recovered checkpoint is not the user's file: never mark it saved.
                 self.saved_version = None;
                 self.doc_path = None;
+                // Recompute: the info inside `r` was produced while the checkpoint looked saved.
+                r.result = self.info()?;
                 Ok(r)
             }
             Command::LayerAdd { kind, name, placement } => self.layer_add(kind, name, placement, label),
