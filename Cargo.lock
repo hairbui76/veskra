@@ -532,6 +532,7 @@ dependencies = [
  "veskra-core",
  "veskra-doc",
  "veskra-raster",
+ "veskra-testkit",
 ]
 
 [[package]]

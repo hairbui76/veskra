@@ -858,11 +858,15 @@
         "BRH-08"
       ],
       "deliverable": "Error-bounded paths generated from sample data; fit precision and speed tests",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-vector fit_curve: max_error bound held on all fixtures (e.g. spiral 0.1 -> 0.091); 26 tests pass; ORCH-verified"
+      ],
       "blockers": [],
-      "notes": [],
-      "impl": "none"
+      "notes": [
+        "Gate: depends on BRH-08 integration"
+      ],
+      "impl": "complete"
     },
     {
       "id": "VEC-02",
@@ -873,11 +877,13 @@
         "VEC-01"
       ],
       "deliverable": "Contour path with capped/joined ends; no self-intersection artifacts in fixtures",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "variable_width_outline: 0 notches/0 spikes on 8 coverage fixtures; rsvg-convert 2.58 independent render within bound"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "VEC-03",
