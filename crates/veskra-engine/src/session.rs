@@ -74,6 +74,9 @@ pub struct InputOutcome {
     pub warnings: Vec<String>,
 }
 
+/// Cloneable so a failed command can restore it: failures never consume IDs, so replaying a
+/// command log without its failing lines yields identical IDs (deterministic replay).
+#[derive(Clone)]
 enum IdSource {
     Random,
     Deterministic(veskra_core::ids::DeterministicIds),
@@ -96,7 +99,9 @@ struct LiveStroke {
     /// Live tiles plus predicted dabs (display only, STY-007).
     predicted_tiles: Option<TileGrid>,
     predicted_rect: RectI,
-    samples: Vec<StrokeSample>,
+    // The confirmed samples are owned by `renderer` (`confirmed_samples()`): only samples the
+    // renderer accepted (validated, monotonic time, in range) are rendered *and* recorded, so the
+    // committed `StrokeRecord` always reproduces the pixels.
     preset: BrushPreset,
     color: ColorRgba,
     seed: u64,
@@ -187,6 +192,10 @@ impl Session {
     pub fn version(&self) -> u64 {
         self.version
     }
+    /// Unsaved changes exist (SAV-002). `saved_version` is the version of the snapshot that was
+    /// written, so edits made after it keep the document dirty. Versions are monotonic: undoing
+    /// back to the saved content still reports dirty (conservative — never a false "saved").
+    /// Recovered checkpoints are never marked saved.
     pub fn is_dirty(&self) -> bool {
         self.doc.is_some() && self.saved_version != Some(self.version)
     }
@@ -262,23 +271,23 @@ impl Session {
     /// Execute a JSON command and return `{"ok": {...}, "version": N, "invalidated": [...], ...}`
     /// or `{"error": {"code", "key", "message", "recoverable"}}`. Never panics on bad input.
     pub fn execute_json(&mut self, json_cmd: &str) -> String {
-        let out = match Command::from_json(json_cmd).and_then(|c| self.execute(c)) {
-            Ok(r) => json!({
-                "ok": r.result,
-                "version": r.document_version,
-                "invalidated": r.invalidated.iter().map(|x| [x.x0, x.y0, x.x1, x.y1]).collect::<Vec<_>>(),
-                "warnings": r.warnings,
-                "historyChanged": r.history_changed,
-                "viewChanged": r.view_changed,
-            }),
-            Err(e) => error_json(&e),
-        };
-        out.to_string()
+        response_json(Command::from_json(json_cmd).and_then(|c| self.execute(c))).to_string()
     }
 
     // ------------------------------------------------------------------ commands
 
+    /// Execute one typed command. On error nothing observable changes — document, version,
+    /// history, live stroke and the ID stream are as before (IDs are restored on failure).
     pub fn execute(&mut self, cmd: Command) -> EResult<Receipt> {
+        let ids = self.ids.clone();
+        let r = self.execute_inner(cmd);
+        if r.is_err() {
+            self.ids = ids;
+        }
+        r
+    }
+
+    fn execute_inner(&mut self, cmd: Command) -> EResult<Receipt> {
         let label = cmd.label();
         match cmd {
             Command::DocumentCreate { width, height, dpi, background } => {
@@ -345,7 +354,10 @@ impl Session {
                 let r = self.mutate(label, |d, s| {
                     let mut gen_id = || s.next_id();
                     let new_id = d.duplicate_layer(id, &mut gen_id)?;
-                    d.active_layer = Some(new_id);
+                    // Like layer.add/layer.select: a group is never the active (paint) layer.
+                    if d.layer(new_id).is_some_and(|l| !l.is_group()) {
+                        d.active_layer = Some(new_id);
+                    }
                     Ok((json!({"layerId": new_id.to_string()}), d.bounds()))
                 })?;
                 Ok(self.finish_mutation(r))
@@ -483,11 +495,19 @@ impl Session {
                 Ok(r)
             }
             Command::StrokeCommit => {
-                let (v, dirty) = self.commit_stroke()?;
+                // On failure the error carries no rects: headless callers must refresh fully.
+                let (v, dirty) = self.commit_stroke();
+                let v = v?;
+                let committed = v.get("committed").and_then(Value::as_bool) == Some(true);
                 let mut r = self.receipt(v);
-                r.history_changed = true;
+                r.history_changed = committed;
                 if !dirty.is_empty() {
                     r.invalidated.push(dirty);
+                }
+                if let Some(t) = r.result.get("historyTrimmed").and_then(Value::as_u64).filter(|t| *t > 0) {
+                    r.warnings.push(format!(
+                        "Undo history was trimmed by {t} oldest step(s) to stay within the memory budget."
+                    ));
                 }
                 Ok(r)
             }
@@ -674,6 +694,7 @@ impl Session {
                 let out = self.apply_actions(actions);
                 let mut r = self.receipt(json!({"flags": out.flags}));
                 r.invalidated = out.dirty;
+                r.warnings = out.warnings;
                 r.history_changed = out.flags & flags::HISTORY != 0;
                 Ok(r)
             }
@@ -863,7 +884,9 @@ impl Session {
             if kind != LayerKindSpec::Group {
                 d.active_layer = Some(id);
             }
-            Ok((json!({"layerId": id.to_string()}), RectI::EMPTY))
+            // Not a no-op visually: an empty layer inserted under a clipping layer (`clip`)
+            // becomes its clip base and hides it.
+            Ok((json!({"layerId": id.to_string()}), d.bounds()))
         })?;
         Ok(self.finish_mutation(r))
     }
@@ -1013,6 +1036,14 @@ impl Session {
         let alpha_locked = layer.props.alpha_locked;
         let selection = d.selection.clone();
         let selection_clipped = selection.is_some();
+        // `Document::add_stroke` only accepts vector-representable strokes on vector layers; refuse
+        // here, before anything is drawn, instead of discarding the finished stroke at commit.
+        if is_vector_layer && (alpha_locked || selection_clipped) {
+            return Err(VeskraError::new(
+                ErrorCode::UnsupportedLayerFeature,
+                "vector layers cannot be painted with alpha lock or through a selection (clear the selection or use a raster layer)",
+            ));
+        }
         let seed = (self.next_id() & u64::MAX as u128) as u64;
         let ctx = StrokeContext {
             mode: if eraser { BrushMode::Erase } else { BrushMode::Paint },
@@ -1029,7 +1060,6 @@ impl Session {
             live_tiles: base,
             predicted_tiles: None,
             predicted_rect: RectI::EMPTY,
-            samples: Vec::new(),
             opacity: preset.opacity,
             preset,
             color: self.color,
@@ -1049,14 +1079,15 @@ impl Session {
         for s in &confirmed {
             s.validate()?;
         }
-        if live.samples.len() + confirmed.len() > veskra_core::limits::MAX_STROKE_SAMPLES {
+        if live.renderer.confirmed_samples().len() + confirmed.len() > veskra_core::limits::MAX_STROKE_SAMPLES {
             return Err(VeskraError::alloc("stroke exceeds the sample limit"));
         }
+        // The renderer skips (and counts) samples it cannot use, e.g. timestamps going backwards
+        // or coordinates beyond its range; only accepted samples end up in the record.
         let mut dirty = live.renderer.add_samples(&confirmed);
         if !dirty.is_empty() {
             live.renderer.render_into(&mut live.live_tiles, dirty);
         }
-        live.samples.extend_from_slice(&confirmed);
         live.bounds = live.bounds.union(&dirty);
         // A new confirmed batch supersedes any prediction.
         if live.predicted_tiles.take().is_some() {
@@ -1081,30 +1112,35 @@ impl Session {
         old.union(&r)
     }
 
-    fn commit_stroke(&mut self) -> EResult<(Value, RectI)> {
-        let live =
-            self.live.take().ok_or_else(|| VeskraError::new(ErrorCode::InvalidState, "no stroke in progress"))?;
-        let dirty = live.bounds.union(&live.predicted_rect);
-        if live.samples.is_empty() {
-            return Ok((json!({"committed": false}), dirty));
+    /// End the live stroke and commit it as exactly one undo step (`{"committed": false}` and no
+    /// history entry when no sample was accepted). The returned rect must be refreshed whether or
+    /// not the commit succeeded: the live preview is gone either way. A failed commit changes
+    /// neither document, version, history nor the ID stream. Failure is not expected in practice:
+    /// samples are pre-filtered by the renderer, vector-layer policy is enforced at begin, and
+    /// every document mutation is refused while a stroke is live.
+    fn commit_stroke(&mut self) -> (EResult<Value>, RectI) {
+        let Some(live) = self.live.take() else {
+            return (Err(VeskraError::new(ErrorCode::InvalidState, "no stroke in progress")), RectI::EMPTY);
+        };
+        let mut dirty = live.bounds.union(&live.predicted_rect);
+        let ids = self.ids.clone();
+        let r = self.commit_live(live, &mut dirty);
+        if r.is_err() {
+            self.ids = ids;
         }
-        let LiveStroke {
-            layer,
-            renderer,
-            samples,
-            preset,
-            color,
-            seed,
-            mode,
-            alpha_locked,
-            selection_clipped,
-            opacity,
-            ..
-        } = live;
+        (r, dirty)
+    }
+
+    fn commit_live(&mut self, live: LiveStroke, dirty: &mut RectI) -> EResult<Value> {
+        let LiveStroke { layer, renderer, preset, color, seed, mode, alpha_locked, selection_clipped, opacity, .. } =
+            live;
         // `finish` flushes the stabilizer and the final dab; its tiles (base ⊕ full stroke) are
         // authoritative, not the live preview tiles.
         let finished = renderer.finish();
-        let dirty = dirty.union(&finished.bounds);
+        *dirty = dirty.union(&finished.bounds);
+        if finished.confirmed_samples.is_empty() {
+            return Ok(json!({"committed": false}));
+        }
         let before = self.doc()?.clone();
         let mut next = (*before).clone();
         let profile = next.color.profile.clone();
@@ -1117,7 +1153,7 @@ impl Session {
         let rec = StrokeRecord::new(
             stroke_id,
             layer,
-            samples,
+            finished.confirmed_samples,
             preset.id.clone(),
             preset.version,
             serde_json::to_string(&preset).map_err(internal)?,
@@ -1134,7 +1170,7 @@ impl Session {
         let trimmed = self.history.record("Stroke", before, &next);
         self.doc = Some(Arc::new(next));
         self.version += 1;
-        Ok((json!({"committed": true, "strokeId": stroke_id.to_string(), "historyTrimmed": trimmed}), dirty))
+        Ok(json!({"committed": true, "strokeId": stroke_id.to_string(), "historyTrimmed": trimmed}))
     }
 
     fn cancel_stroke(&mut self) -> RectI {
@@ -1220,9 +1256,11 @@ impl Session {
                         self.swallow_stroke = false;
                         continue;
                     }
-                    match self.commit_stroke() {
-                        Ok((v, r)) => {
-                            dirty = dirty.union(&r);
+                    let (res, r) = self.commit_stroke();
+                    // Refresh even on failure: the live preview is gone.
+                    dirty = dirty.union(&r);
+                    match res {
+                        Ok(v) => {
                             if v.get("committed").and_then(|c| c.as_bool()) == Some(true) {
                                 out.flags |= flags::COMMITTED | flags::HISTORY;
                             }
@@ -1231,10 +1269,18 @@ impl Session {
                     }
                 }
                 InputAction::StrokeCancel => {
-                    self.swallow_stroke = false;
+                    // A swallowed input stroke never owned `self.live` (which may be a headless
+                    // stroke that made this one's begin fail): only end the swallow.
+                    if std::mem::take(&mut self.swallow_stroke) {
+                        continue;
+                    }
                     dirty = dirty.union(&self.cancel_stroke());
                 }
-                InputAction::Hover(p) => out.hover = p,
+                InputAction::Hover(p) => {
+                    out.hover = p;
+                    // Latest hover (or exit) is what an eyedropper press in this batch samples.
+                    self.hover = p;
+                }
                 InputAction::ViewChanged(v) => {
                     self.view = v;
                     out.flags |= flags::VIEW;
@@ -1271,9 +1317,6 @@ impl Session {
                     _ => {}
                 },
             }
-        }
-        if out.hover.is_some() {
-            self.hover = out.hover;
         }
         if let Some(d) = &self.doc {
             dirty = dirty.intersect(&d.bounds());
@@ -1344,6 +1387,22 @@ fn sample_from_spec(s: &SampleSpec) -> EResult<StrokeSample> {
 
 fn internal(e: serde_json::Error) -> VeskraError {
     VeskraError::new(ErrorCode::Internal, format!("serialization: {e}"))
+}
+
+/// The response envelope of `execute_json` (docs/COMMANDS.md): `{"ok", "version", "invalidated",
+/// "warnings", "historyChanged", "viewChanged"}` or `{"error": {...}}`.
+pub fn response_json(r: EResult<Receipt>) -> Value {
+    match r {
+        Ok(r) => json!({
+            "ok": r.result,
+            "version": r.document_version,
+            "invalidated": r.invalidated.iter().map(|x| [x.x0, x.y0, x.x1, x.y1]).collect::<Vec<_>>(),
+            "warnings": r.warnings,
+            "historyChanged": r.history_changed,
+            "viewChanged": r.view_changed,
+        }),
+        Err(e) => error_json(&e),
+    }
 }
 
 pub fn error_json(e: &VeskraError) -> Value {

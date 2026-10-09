@@ -1,13 +1,21 @@
 //! Command schema (ARCHITECTURE §C). The same typed commands serve the Android UI (as JSON over
 //! JNI), the CLI and tests. Serialized names (`"cmd": "layer.add"`, camelCase fields) are the
 //! stable FFI contract documented in `docs/COMMANDS.md`.
+//!
+//! **Unknown fields are rejected** (`deny_unknown_fields`, review decision): a misspelled optional
+//! field (e.g. `"opactiy"`) would otherwise be ignored and the command would report success —
+//! for `layer.set` even recording an undo step that changed nothing. UI and engine ship together
+//! in one APK, so there is no version skew to tolerate. Explicit `null` for an optional field is
+//! accepted (the Kotlin builders send `"background": null`). Limits: field-less commands (serde
+//! unit variants, e.g. `document.info`) ignore extra keys — they have no argument to misspell —
+//! and `ExportOptions` (veskra-core) still ignores unknown fields.
 
 use serde::{Deserialize, Serialize};
 use veskra_core::export::{ExportFormat, ExportOptions};
 
 /// Where to place a layer, mirroring `veskra_doc::Placement` in JSON form.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", tag = "at")]
+#[serde(rename_all = "camelCase", tag = "at", deny_unknown_fields)]
 pub enum PlacementSpec {
     /// Directly above the active layer (or top of the stack when none).
     #[default]
@@ -46,6 +54,7 @@ pub enum SelectionOp {
 
 /// One input sample for headless `stroke.samples` (document coordinates).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SampleSpec {
     pub x: f32,
     pub y: f32,
@@ -62,7 +71,7 @@ pub struct SampleSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "cmd", rename_all_fields = "camelCase")]
+#[serde(tag = "cmd", rename_all_fields = "camelCase", deny_unknown_fields)]
 pub enum Command {
     // ----- document -----
     #[serde(rename = "document.create")]

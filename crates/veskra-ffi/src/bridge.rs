@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use veskra_core::{ErrorCode, RectI, VeskraError};
-use veskra_engine::{Command, EngineConfig, Session, error_json};
+use veskra_engine::{Command, EngineConfig, Receipt, Session, error_json, response_json};
 
 type Shared = Arc<Mutex<Session>>;
 
@@ -50,32 +50,50 @@ fn bad_handle() -> String {
     error_json(&VeskraError::new(ErrorCode::InvalidState, "invalid or destroyed session handle")).to_string()
 }
 
-/// `nativeExecute`. Export commands snapshot the document under the lock and run unlocked.
+/// Largest accepted command JSON (a maximal `stroke.samples` batch is far below this).
+pub const MAX_COMMAND_BYTES: usize = 64 * 1024 * 1024;
+
+/// `nativeExecute`. The JSON is parsed once, outside the session lock. Export commands snapshot
+/// the committed document (never the live stroke) under the lock and encode/write unlocked; the
+/// response uses the same envelope as every other command (`version` = snapshot version).
 pub fn execute_json(handle: i64, json: &str) -> String {
     let Some(s) = session(handle) else { return bad_handle() };
-    if json.len() > 64 * 1024 * 1024 {
+    if json.len() > MAX_COMMAND_BYTES {
         return error_json(&VeskraError::alloc("command too large")).to_string();
     }
-    match Command::from_json(json) {
-        Ok(Command::ExportRun { format, path, options }) => {
-            let snap = match lock(&s).snapshot() {
-                Ok(d) => d,
-                Err(e) => return error_json(&e).to_string(),
+    let cmd = match Command::from_json(json) {
+        Ok(c) => c,
+        Err(e) => return error_json(&e).to_string(),
+    };
+    let out = match cmd {
+        Command::ExportRun { format, path, options } => {
+            let snap = {
+                let g = lock(&s);
+                g.snapshot().map(|d| (d, g.version()))
             };
-            match veskra_engine::export_snapshot(
-                &snap,
-                format,
-                &options,
-                &PathBuf::from(path),
-                &veskra_engine::CancelToken::new(),
-            ) {
-                Ok(rep) => serde_json::json!({"ok": rep}).to_string(),
-                Err(e) => error_json(&e).to_string(),
-            }
+            snap.and_then(|(snap, version)| {
+                let rep = veskra_engine::export_snapshot(
+                    &snap,
+                    format,
+                    &options,
+                    &PathBuf::from(path),
+                    &veskra_engine::CancelToken::new(),
+                )?;
+                let result = serde_json::to_value(rep)
+                    .map_err(|e| VeskraError::new(ErrorCode::Internal, format!("serialization: {e}")))?;
+                Ok(Receipt {
+                    result,
+                    document_version: version,
+                    invalidated: vec![],
+                    warnings: vec![],
+                    history_changed: false,
+                    view_changed: false,
+                })
+            })
         }
-        Ok(_) => lock(&s).execute_json(json),
-        Err(e) => error_json(&e).to_string(),
-    }
+        cmd => lock(&s).execute(cmd),
+    };
+    response_json(out).to_string()
 }
 
 /// `nativeInputBatch` → `[flags, nRects, x0, y0, x1, y1, ...]`. Malformed batches return
@@ -97,7 +115,16 @@ pub fn input_batch(handle: i64, ints: &[i32], floats: &[f32], longs: &[i64], cou
     out
 }
 
-/// `nativeGetView` → `[a, b, c, d, e, f, zoom, rotation, mirror]`.
+/// How many elements of each JNI array `nativeInputBatch` must copy: only the `count`-event
+/// prefix (Kotlin passes capacity-sized, reused arrays). Never more than the array holds; a
+/// shorter array is still rejected by `unpack_events`.
+pub fn batch_copy_lens(count: i32, ints_len: usize, floats_len: usize, longs_len: usize) -> (usize, usize, usize) {
+    use veskra_input::event::{FLOATS_PER_EVENT, INTS_PER_EVENT};
+    let n = usize::try_from(count).unwrap_or(0).min(veskra_input::MAX_EVENTS_PER_BATCH);
+    (ints_len.min(n * INTS_PER_EVENT), floats_len.min(n * FLOATS_PER_EVENT), longs_len.min(n))
+}
+
+/// `nativeGetView` →`[a, b, c, d, e, f, zoom, rotation, mirror]`.
 pub fn get_view(handle: i64) -> [f32; 9] {
     let Some(s) = session(handle) else { return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0] };
     let v = lock(&s).view();
@@ -222,6 +249,125 @@ mod tests {
         assert!(render_region(h, 0, 0, 128, 128, &mut buf));
         assert_eq!(&buf[(64 * 128 + 50) * 4..(64 * 128 + 50) * 4 + 4], &[255, 255, 255, 255]);
         destroy_session(h);
+    }
+
+    /// Defect: `export.run` through the bridge returned a bare `{"ok": report}` — no `version`,
+    /// `invalidated`, `warnings`, `historyChanged`, `viewChanged` — unlike every other command
+    /// and unlike the same command through `Session::execute_json` (COMMANDS.md envelope).
+    #[test]
+    fn export_run_uses_the_standard_envelope_and_excludes_live_stroke() {
+        let h = create_session();
+        ok(&execute_json(h, r##"{"cmd":"document.create","width":40,"height":30,"background":"#FFFFFF"}"##));
+        ok(&execute_json(h, r#"{"cmd":"stroke.begin"}"#));
+        ok(&execute_json(h, r#"{"cmd":"stroke.samples","samples":[{"x":2,"y":2,"p":0.9},{"x":38,"y":28,"p":0.9}]}"#));
+        let dir = std::env::temp_dir().join(format!("veskra-ffi-review-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("e.png");
+        let cmd = serde_json::json!({"cmd": "export.run", "format": "png", "path": path.to_string_lossy()});
+        let out = ok(&execute_json(h, &cmd.to_string()));
+        for k in ["ok", "version", "invalidated", "warnings", "historyChanged", "viewChanged"] {
+            assert!(out.get(k).is_some(), "missing {k}: {out}");
+        }
+        assert_eq!(out["version"], 1);
+        assert_eq!(out["historyChanged"], false);
+        assert_eq!(out["ok"]["success"], true);
+        // Same command through the session path: identical envelope keys.
+        let s = session(h).unwrap();
+        let direct: serde_json::Value = serde_json::from_str(&lock(&s).execute_json(&cmd.to_string())).unwrap();
+        let keys = |v: &serde_json::Value| v.as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys(&out), keys(&direct));
+        drop(s);
+        destroy_session(h);
+    }
+
+    /// Fuzz-style: random handles, arrays, counts, rects and mutated JSON never panic, and
+    /// rendering never writes outside `w*h*4` bytes.
+    #[test]
+    fn bridge_functions_never_panic_on_random_input() {
+        let mut st = 0x1234_5678_9abc_def0u64;
+        let mut rnd = move || {
+            st ^= st << 13;
+            st ^= st >> 7;
+            st ^= st << 17;
+            st
+        };
+        let h = create_session();
+        ok(&execute_json(h, r##"{"cmd":"document.create","width":70,"height":50,"background":"#336699"}"##));
+        set_viewport(h, 70, 50);
+        let seeds = [
+            r#"{"cmd":"layer.add","kind":"vector","name":"x"}"#,
+            r#"{"cmd":"selection.rect","x0":1,"y0":2,"x1":30,"y1":40,"op":"add"}"#,
+            r#"{"cmd":"stroke.samples","samples":[{"x":1,"y":2,"t":3,"p":0.5}]}"#,
+            r#"{"cmd":"edit.transform","matrix":[1,0,0,1,5,5]}"#,
+            r#"{"cmd":"view.set","zoom":2.5,"rotation":1.0}"#,
+            r#"{"cmd":"stroke.begin"}"#,
+            r#"{"cmd":"history.undo"}"#,
+        ];
+        let junk = ["", "{", "}", "\"", "1e999", "-1", "null", "[]", "\u{0}", "NaN", "9999999999999999999999"];
+        for i in 0..3000 {
+            let base = seeds[(rnd() % seeds.len() as u64) as usize];
+            let mut cmd = base.to_string();
+            let pos = (rnd() as usize) % (cmd.len() + 1);
+            if cmd.is_char_boundary(pos) && rnd() % 2 == 0 {
+                cmd.insert_str(pos, junk[(rnd() % junk.len() as u64) as usize]);
+            }
+            let handle = if i % 50 == 0 { rnd() as i64 } else { h };
+            let _ = execute_json(handle, &cmd);
+            let n = (rnd() % 12) as usize;
+            let ints: Vec<i32> = (0..n * 5 + (rnd() % 3) as usize).map(|_| (rnd() % 12) as i32 - 2).collect();
+            let floats: Vec<f32> = (0..n * 8)
+                .map(|_| match rnd() % 6 {
+                    0 => f32::NAN,
+                    1 => f32::INFINITY,
+                    2 => -1e30,
+                    _ => (rnd() % 100) as f32,
+                })
+                .collect();
+            let longs: Vec<i64> =
+                (0..n).map(|k| if rnd() % 20 == 0 { -1 } else { (i * 10 + k) as i64 * 1_000_000 }).collect();
+            let _ = input_batch(handle, &ints, &floats, &longs, (rnd() % 16) as i32 - 2);
+            let (x, y) = ((rnd() % 200) as i32 - 100, (rnd() % 200) as i32 - 100);
+            let (w, hh) = ((rnd() % 90) as i32 - 5, (rnd() % 90) as i32 - 5);
+            let cap = (rnd() % 40_000) as usize;
+            let mut buf = vec![0xAAu8; cap + 64];
+            let _ = render_region(handle, x, y, w, hh, &mut buf[..cap]);
+            assert!(buf[cap..].iter().all(|b| *b == 0xAA), "wrote past the slice");
+            let _ = get_view(handle);
+            set_viewport(handle, (rnd() % 3000) as i32 - 100, (rnd() % 3000) as i32 - 100);
+        }
+        for (x, y, w, hh) in [(i32::MIN, 0, 4, 4), (i32::MAX - 1, 0, 4, 4), (0, 0, 8192, 8192), (-3, -3, 4, 4)] {
+            let mut b = vec![0u8; 64];
+            let _ = render_region(h, x, y, w, hh, &mut b);
+        }
+        // Partially outside the canvas: allowed, outside pixels are transparent.
+        let mut b = vec![0xFFu8; 4 * 4 * 4];
+        assert!(render_region(h, -2, -2, 4, 4, &mut b));
+        assert_eq!(&b[0..4], &[0, 0, 0, 0]);
+        destroy_session(h);
+    }
+
+    /// Perf defect: `nativeInputBatch` copied the packer's whole capacity (up to 65536 events,
+    /// ~3.4 MB) across JNI on every pen batch. Only the `count` prefix is needed.
+    #[test]
+    fn input_batch_copies_only_the_count_prefix() {
+        assert_eq!(batch_copy_lens(3, 5 * 4096, 8 * 4096, 4096), (15, 24, 3));
+        assert_eq!(batch_copy_lens(3, 10, 24, 3), (10, 24, 3)); // short array: still rejected later
+        assert_eq!(batch_copy_lens(-1, 100, 100, 100), (0, 0, 0));
+        assert_eq!(batch_copy_lens(i32::MAX, 7, 9, 11), (7, 9, 11));
+        // The prefix decodes exactly like the full arrays.
+        let evs = veskra_input::trace::parse_jsonl(
+            "{\"action\":\"Down\",\"pointer_id\":0,\"tool\":\"Stylus\",\"x\":1.0,\"y\":2.0,\"t_ns\":5,\"pressure\":0.5}",
+        )
+        .unwrap();
+        let (mut i, mut f, mut l) = veskra_input::pack_events(&evs);
+        i.resize(5 * 64, 0);
+        f.resize(8 * 64, 0.0);
+        l.resize(64, 0);
+        let (ni, nf, nl) = batch_copy_lens(1, i.len(), f.len(), l.len());
+        assert_eq!(
+            veskra_input::unpack_events(&i[..ni], &f[..nf], &l[..nl], 1).unwrap(),
+            veskra_input::unpack_events(&i, &f, &l, 1).unwrap()
+        );
     }
 
     #[test]

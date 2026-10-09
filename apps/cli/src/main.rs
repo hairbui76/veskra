@@ -8,7 +8,7 @@
 //! veskra inspect-project <in.veskra>           manifest/entries/layers summary as JSON
 //! veskra inspect-export <file.(png|psd|svg|pdf)>  structural validation of an export
 //! veskra export <in.veskra> <out.ext> [--no-vector] [--no-raster] [--no-icc]
-//! veskra benchmark-stroke [--size N] [--samples N] [--brush ID]
+//! veskra benchmark-stroke [--size N] [--samples N] [--brush ID] [--input] [--predict]
 //! veskra compare-color <a.png> <b.png>         per-channel diff + CIEDE2000 stats (sRGB, opaque)
 //! ```
 //! Exit code 0 on success, 1 on any error (errors printed as JSON on stderr).
@@ -17,7 +17,9 @@ use serde_json::{Value, json};
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
+use veskra_core::ToolType;
 use veskra_core::export::{ExportFormat, ExportOptions};
+use veskra_engine::veskra_input::{PointerAction, RawPointerEvent};
 use veskra_engine::{Command, EngineConfig, Session};
 
 fn main() -> ExitCode {
@@ -123,6 +125,12 @@ fn run(args: &[String]) -> R<Value> {
                 }
             }
             let el = start.elapsed();
+            // A trace may end mid-stroke (app paused/killed): apply the lifecycle policy
+            // (commit confirmed samples) instead of failing the save on a live stroke.
+            let reset = exec(&mut s, Command::InputReset)?;
+            if reset["flags"].as_i64().unwrap_or(0) & i64::from(veskra_engine::flags::COMMITTED) != 0 {
+                commits += 1;
+            }
             exec(&mut s, Command::DocumentSave { path: outp.clone() })?;
             let info = exec(&mut s, Command::DocumentInfo)?;
             Ok(
@@ -158,10 +166,14 @@ fn run(args: &[String]) -> R<Value> {
             let bytes = std::fs::read(inp).map_err(|e| e.to_string())?;
             let info = veskra_format::inspect(&bytes).map_err(|e| veskra_core::VeskraError::from(e).to_string())?;
             let mut s = session(None);
-            let layers = exec(&mut s, Command::DocumentOpen { path: inp.clone() })
+            // A bundle can be structurally readable yet not openable (future schema, corrupt
+            // document data): say why instead of silently reporting `layers: null`.
+            match exec(&mut s, Command::DocumentOpen { path: inp.clone() })
                 .and_then(|_| exec(&mut s, Command::LayerList))
-                .unwrap_or(Value::Null);
-            Ok(json!({"bundle": format!("{info:?}"), "layers": layers}))
+            {
+                Ok(layers) => Ok(json!({"bundle": format!("{info:?}"), "layers": layers})),
+                Err(e) => Ok(json!({"bundle": format!("{info:?}"), "layers": null, "openError": e})),
+            }
         }
         "inspect-export" => {
             let inp = rest.first().ok_or("inspect-export <file>")?;
@@ -174,43 +186,88 @@ fn run(args: &[String]) -> R<Value> {
             let size: u32 = opt(rest, "--size").and_then(|s| s.parse().ok()).unwrap_or(2048);
             let samples: usize = opt(rest, "--samples").and_then(|s| s.parse().ok()).unwrap_or(2000);
             let brush = opt(rest, "--brush").unwrap_or("pen.brush").to_string();
+            if samples == 0 {
+                return Err("--samples must be at least 1".into());
+            }
             let mut s = session(Some(7));
             exec(
                 &mut s,
                 Command::DocumentCreate { width: size, height: size, dpi: 300.0, background: Some("#FFFFFF".into()) },
             )?;
             exec(&mut s, Command::BrushSelect { preset: brush.clone() })?;
-            exec(&mut s, Command::StrokeBegin { eraser: false })?;
-            let mut lat = Vec::with_capacity(samples / 4);
+            // `--input` drives the Android hot path (raw events → arbiter → live stroke);
+            // `--predict` adds 3 predicted (display-only) events per batch, as Android does.
+            let via_input = flag(rest, "--input") || flag(rest, "--predict");
+            let predict = flag(rest, "--predict");
+            let pt = |k: usize| {
+                let t = k as f32 / samples as f32;
+                let (x, y) = (size as f32 * (0.1 + 0.8 * t), size as f32 * (0.5 + 0.3 * (t * 12.0).sin()));
+                (x, y, 0.3 + 0.7 * (t * 3.0).sin().abs(), k as u64 * 4_000_000)
+            };
+            let raw = |a: PointerAction, k: usize, predicted: bool| {
+                let (x, y, p, t) = pt(k);
+                let mut e = RawPointerEvent::new(a, 0, ToolType::Stylus, x, y, 1_000_000_000 + t);
+                e.pressure = Some(p);
+                e.predicted = predicted;
+                e
+            };
+            if via_input {
+                exec(&mut s, Command::ViewSize { width: size as f64, height: size as f64 })?;
+                exec(
+                    &mut s,
+                    Command::ViewSet {
+                        zoom: Some(1.0),
+                        rotation: Some(0.0),
+                        pan_x: Some(0.0),
+                        pan_y: Some(0.0),
+                        mirror: Some(false),
+                    },
+                )?;
+            } else {
+                exec(&mut s, Command::StrokeBegin { eraser: false })?;
+            }
+            let mut lat = Vec::with_capacity(samples / 4 + 1);
             let t0 = Instant::now();
             let batch = 4;
             let mut i = 0;
             while i < samples {
-                let pts: Vec<veskra_engine::SampleSpec> = (i..(i + batch).min(samples))
-                    .map(|k| {
-                        let t = k as f32 / samples as f32;
-                        veskra_engine::SampleSpec {
-                            x: size as f32 * (0.1 + 0.8 * t),
-                            y: size as f32 * (0.5 + 0.3 * (t * 12.0).sin()),
-                            t: k as u64 * 4_000_000,
-                            p: Some(0.3 + 0.7 * (t * 3.0).sin().abs()),
-                            tilt: None,
-                            azimuth: None,
-                        }
-                    })
-                    .collect();
+                let end = (i + batch).min(samples);
                 let tb = Instant::now();
-                exec(&mut s, Command::StrokeSamples { samples: pts })?;
+                if via_input {
+                    let mut evs: Vec<RawPointerEvent> = (i..end)
+                        .map(|k| raw(if k == 0 { PointerAction::Down } else { PointerAction::Move }, k, false))
+                        .collect();
+                    if predict {
+                        evs.extend((end..end + 3).map(|k| raw(PointerAction::Move, k, true)));
+                    }
+                    let _ = s.input_batch(&evs);
+                } else {
+                    let pts: Vec<veskra_engine::SampleSpec> = (i..end)
+                        .map(|k| {
+                            let (x, y, p, t) = pt(k);
+                            veskra_engine::SampleSpec { x, y, t, p: Some(p), tilt: None, azimuth: None }
+                        })
+                        .collect();
+                    exec(&mut s, Command::StrokeSamples { samples: pts })?;
+                }
                 lat.push(tb.elapsed().as_secs_f64() * 1e3);
-                i += batch;
+                i = end;
             }
             let tc = Instant::now();
-            exec(&mut s, Command::StrokeCommit)?;
+            if via_input {
+                let o = s.input_batch(&[raw(PointerAction::Up, samples - 1, false)]);
+                if o.flags & veskra_engine::flags::COMMITTED == 0 {
+                    return Err(format!("stroke was not committed: {:?}", o.warnings));
+                }
+            } else {
+                exec(&mut s, Command::StrokeCommit)?;
+            }
             let commit_ms = tc.elapsed().as_secs_f64() * 1e3;
             let total = t0.elapsed().as_secs_f64() * 1e3;
             lat.sort_by(|a, b| a.total_cmp(b));
             let pct = |p: f64| lat[((lat.len() as f64 - 1.0) * p) as usize];
             Ok(json!({"environment": "HOST CPU (not a device measurement)", "brush": brush, "canvas": size,
+                      "path": if predict { "input+prediction" } else if via_input { "input" } else { "stroke.samples" },
                       "samples": samples, "batchSize": batch, "totalMs": total, "commitMs": commit_ms,
                       "batchLatencyMs": {"p50": pct(0.5), "p95": pct(0.95), "max": pct(1.0)}}))
         }

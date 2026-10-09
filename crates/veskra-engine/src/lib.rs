@@ -14,7 +14,9 @@ pub mod command;
 mod session;
 
 pub use command::{Command, LayerKindSpec, PlacementSpec, SampleSpec, SelectionOp};
-pub use session::{EResult, EngineConfig, FALLBACK_PRESSURE, InputOutcome, Receipt, Session, error_json, flags};
+pub use session::{
+    EResult, EngineConfig, FALLBACK_PRESSURE, InputOutcome, Receipt, Session, error_json, flags, response_json,
+};
 
 pub use veskra_core;
 pub use veskra_doc;

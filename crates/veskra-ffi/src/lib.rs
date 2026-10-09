@@ -86,11 +86,13 @@ pub extern "system" fn Java_org_veskra_kit_NativeBridge_nativeInputBatch<'caller
     count: jint,
 ) -> JIntArray<'caller> {
     env.with_env(|env| -> JResult<_> {
-        let mut bi = vec![0i32; ints.len(env)?];
+        // Copy only the `count`-event prefix of the (capacity-sized, reused) Kotlin arrays.
+        let (ni, nf, nl) = bridge::batch_copy_lens(count, ints.len(env)?, floats.len(env)?, longs.len(env)?);
+        let mut bi = vec![0i32; ni];
         ints.get_region(env, 0, &mut bi)?;
-        let mut bf = vec![0f32; floats.len(env)?];
+        let mut bf = vec![0f32; nf];
         floats.get_region(env, 0, &mut bf)?;
-        let mut bl = vec![0i64; longs.len(env)?];
+        let mut bl = vec![0i64; nl];
         longs.get_region(env, 0, &mut bl)?;
         let out = bridge::input_batch(handle, &bi, &bf, &bl, count);
         let arr = env.new_int_array(out.len())?;
