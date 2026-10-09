@@ -85,11 +85,15 @@
         "SPK-01"
       ],
       "deliverable": "sRGB/ICC swatches, LittleCMS Android build, GPU/display path tracing, profile tests and initial thresholds",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Host baseline: COL-002 16.7M colors 0 LSB; COL-003 sRGB->P3 median dE00 0.088 p95 0.300 (docs/reports/color-baseline.md)"
+      ],
+      "blockers": [
+        "Android LittleCMS build/GPU display path trace needs device+NDK (unavailable); ADR-006 chose pure-Rust instead"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "SPK-06",
@@ -376,11 +380,13 @@
         "CORE-04"
       ],
       "deliverable": "Typed depth/encoding/premultiplication/profile contract; no ambiguous buffers; freeze before blend-mode implementation",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-color convert/PixelDescriptor policy; 55 tests pass; ORCH-verified"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "AND-01",
@@ -946,11 +952,13 @@
         "SPK-05"
       ],
       "deliverable": "Safe profile ingestion and sRGB transforms with numerical reference fixtures",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "ICC v2/v4 matrix/TRC parser+writer; bit-exact vs LittleCMS 2.19 (unoptimized) on 183 swatches; 0 panics on truncation/15k mutations; fixtures regenerate byte-identically"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CLR-03",
