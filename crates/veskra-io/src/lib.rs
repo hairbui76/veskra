@@ -46,7 +46,12 @@ pub fn exporter_for(format: ExportFormat) -> Box<dyn Exporter + Send + Sync> {
         ExportFormat::Png => Box::new(png::PngExporter),
         ExportFormat::Psd => Box::new(psd::PsdExporter),
         ExportFormat::Svg => Box::new(svg::SvgExporter::default()),
-        ExportFormat::Pdf => Box::new(pdf::PdfExporter::default()),
+        // ADR-012 (provisional, 2026-10-09): Inkscape 1.2.2 drops hidden optional-content
+        // layers on PDF import, so PDF defaults to the residual strategy (nothing editable is
+        // hidden). SVG keeps hidden editable vectors (preserved by Inkscape re-save).
+        ExportFormat::Pdf => {
+            Box::new(pdf::PdfExporter { strategy: plan::HybridStrategy::VectorsVisibleRasterResidual })
+        }
         #[allow(unreachable_patterns)]
         _ => Box::new(png::PngExporter),
     }

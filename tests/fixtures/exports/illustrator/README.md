@@ -14,8 +14,8 @@ They are not native `.ai` files and must never be renamed to `.ai`.
   `cargo test -p veskra-io --test svg_pdf_interop` (fixture documents built in
   `crates/veskra-io/tests/svg_fixtures/mod.rs` and `svg_pdf_interop.rs::fixtures()`) and copies the
   files from `target/interop/illustrator/`.
-* Generated 2026-10-09 from the uncommitted FMT-B working tree on top of `402193d`
-  (toolchain 1.97.0). Content is synthetic (procedural strokes/textures); no third-party artwork.
+* Generated 2026-10-09 from the FMT-B working tree on top of `402193d` (sources identical to checkpoint
+  `c10b7f2`; toolchain 1.97.0). Content is synthetic (procedural strokes/textures); no third-party artwork.
 * Output is deterministic for a given source tree (`deterministic_bytes` test).
 
 | File | Fixture / options / strategy | What to look for |

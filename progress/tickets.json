@@ -102,11 +102,15 @@
       "owner": "FMT",
       "depends": [],
       "deliverable": "Two independent PSD candidates tested on 6-layer file; Photoshop/Krita opening, ICC/thumbnail/masks; comparison report",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Independent PSD writer verified with psd-tools/Krita/ImageMagick (docs/reports/psd-interop.md)"
+      ],
+      "blockers": [
+        "Photoshop opening + psd-great/PhotoCraft comparison not run (no Adobe access; git sources not fetched)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "SPK-07",
@@ -115,11 +119,15 @@
       "owner": "FMT + BRH",
       "depends": [],
       "deliverable": "Pressure-outline example + embedded raster opens/edits in Illustrator; validate hidden editable/reference layering",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Open-source SVG/PDF proof (rsvg, Inkscape, poppler, qpdf, pypdf)"
+      ],
+      "blockers": [
+        "Illustrator open/edit evidence requires Adobe access"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "SPK-08",
@@ -1309,11 +1317,15 @@
         "VEC-02"
       ],
       "deliverable": "SVG paths/groups/transforms, pressure outlines, illustrator selects/recolors",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io SVG/PDF: plan matrix (no double-visible stroke, no dropped content), rsvg/pdftocairo renders = Veskra composite (raster-shown, max diff 0), 50% stroke alpha 128 vs 192 negative control, qpdf 27/27, pypdf 29/29 (docs/reports/illustrator-export.md)"
+      ],
+      "blockers": [
+        "Adobe Illustrator NOT TESTED (R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-13",
@@ -1325,11 +1337,15 @@
         "CLR-05"
       ],
       "deliverable": "Tagged sRGB PNG embeds, correct alpha/size/orientation and no doubled drawing",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io SVG/PDF: plan matrix (no double-visible stroke, no dropped content), rsvg/pdftocairo renders = Veskra composite (raster-shown, max diff 0), 50% stroke alpha 128 vs 192 negative control, qpdf 27/27, pypdf 29/29 (docs/reports/illustrator-export.md)"
+      ],
+      "blockers": [
+        "Adobe Illustrator NOT TESTED (R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-14",
@@ -1342,11 +1358,15 @@
         "SPK-07"
       ],
       "deliverable": "Vector objects editable in Illustrator; ICC/appearance tests and report",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io SVG/PDF: plan matrix (no double-visible stroke, no dropped content), rsvg/pdftocairo renders = Veskra composite (raster-shown, max diff 0), 50% stroke alpha 128 vs 192 negative control, qpdf 27/27, pypdf 29/29 (docs/reports/illustrator-export.md)"
+      ],
+      "blockers": [
+        "Adobe Illustrator NOT TESTED (R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-15",
@@ -1358,11 +1378,15 @@
         "FMT-14"
       ],
       "deliverable": "Both-checkbox behavior works in Illustrator: source appearance correct, vectors accessible",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "Hybrid strategies implemented; Inkscape drops hidden PDF OCG content -> PDF default residual (ADR-012 amendment)"
+      ],
+      "blockers": [
+        "Illustrator import behaviour unverified (R-06/R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "AND-07",

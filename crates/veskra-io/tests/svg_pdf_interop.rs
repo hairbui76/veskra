@@ -282,11 +282,13 @@ fn interop_open_source_oracles_no_double_rendering() {
                 let file = dir.join(format!("{}-{label}.{}", fx.name, format.extension()));
                 let rep = export_to_path(&fx.doc, format, opts, &file, &CancelToken::new())
                     .unwrap_or_else(|e| panic!("{}: {e:?}", file.display()));
-                // export_to_path dispatches to the default strategy; residual uses the exporter directly.
-                let rep = if *strategy == RES {
+                // export_to_path dispatches to the per-format default strategy (ADR-012 amendment);
+                // when the strategy under test differs, use the exporter directly.
+                let default_strategy = if format == ExportFormat::Pdf { RES } else { HybridStrategy::default() };
+                let rep = if *strategy != default_strategy {
                     let ex: Box<dyn Exporter> = match format {
-                        ExportFormat::Svg => Box::new(svg::SvgExporter { strategy: RES }),
-                        _ => Box::new(pdf::PdfExporter { strategy: RES }),
+                        ExportFormat::Svg => Box::new(svg::SvgExporter { strategy: *strategy }),
+                        _ => Box::new(pdf::PdfExporter { strategy: *strategy }),
                     };
                     let mut buf = Vec::new();
                     let r = ex.export(&fx.doc, opts, &mut buf, &CancelToken::new()).unwrap();
