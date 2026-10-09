@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  All user-facing text lives here (localization keys from day one, MASTER_PLAN §8.3).
+  Wording rules (AGENTS.md §3, REL-01): never imply that Veskra writes Illustrator project files; Illustrator
+  handoff is SVG or PDF. Never promise identical color on every device. The :kit test
+  ExportSheetStateTest scans this file for forbidden wording.
+  "Veskra" is the provisional working name (README "About the name").
+-->
+<resources>
+    <string name="app_name" translatable="false">Veskra</string>
+
+    <!-- Gallery -->
+    <string name="gallery_title">Gallery</string>
+    <string name="gallery_new_canvas">New canvas</string>
+    <string name="gallery_open">Open project</string>
+    <string name="gallery_recent">Recent projects</string>
+    <string name="gallery_empty">No projects yet. Start a new canvas or open a .veskra project.</string>
+    <string name="gallery_recovery_title">Recover unsaved work</string>
+    <string name="gallery_recovery_body">Veskra closed before your last changes were saved. A recovery checkpoint from %1$s is available.</string>
+    <string name="gallery_recovery_restore">Restore</string>
+    <string name="gallery_recovery_discard">Discard</string>
+    <string name="gallery_storage_note">Projects in this list are stored privately on this device.</string>
+    <string name="gallery_item_modified">Modified %1$s</string>
+    <string name="gallery_open_project_cd">Open project %1$s</string>
+
+    <!-- New canvas dialog -->
+    <string name="new_canvas_title">New canvas</string>
+    <string name="new_canvas_preset_square">Square · 2048 × 2048</string>
+    <string name="new_canvas_preset_landscape">Landscape · 4096 × 3072</string>
+    <string name="new_canvas_preset_portrait">Portrait · 3072 × 4096</string>
+    <string name="new_canvas_preset_custom">Custom</string>
+    <string name="new_canvas_width">Width (px)</string>
+    <string name="new_canvas_height">Height (px)</string>
+    <string name="new_canvas_dpi">Resolution (DPI)</string>
+    <string name="new_canvas_color_space">Color space</string>
+    <string name="new_canvas_color_space_srgb">sRGB</string>
+    <string name="new_canvas_color_space_note">Veskra 1.0 paints in sRGB.</string>
+    <string name="new_canvas_memory">Estimated memory: up to %1$s</string>
+    <string name="new_canvas_create">Create</string>
+    <string name="new_canvas_name">Name</string>
+    <string name="new_canvas_background">Background</string>
+    <string name="new_canvas_bg_white">White</string>
+    <string name="new_canvas_bg_transparent">Transparent</string>
+    <string name="new_canvas_error_non_positive">Width and height must be at least 1 pixel.</string>
+    <string name="new_canvas_error_edge">Each side can be at most 16384 pixels.</string>
+    <string name="new_canvas_error_pixels">The canvas is too large. Keep it at or below 8192 × 8192 pixels in total.</string>
+    <string name="new_canvas_error_dpi">Resolution must be between 30 and 2400 DPI.</string>
+
+    <!-- Common -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_ok">OK</string>
+    <string name="action_close">Close</string>
+    <string name="action_retry">Retry</string>
+
+    <!-- Editor chrome (content descriptions double as accessible tool names) -->
+    <string name="editor_back">Back to gallery</string>
+    <string name="editor_canvas_cd">Drawing canvas</string>
+    <string name="tool_brush">Brush</string>
+    <string name="tool_eraser">Eraser</string>
+    <string name="tool_color">Color</string>
+    <string name="tool_layers">Layers</string>
+    <string name="tool_undo">Undo</string>
+    <string name="tool_redo">Redo</string>
+    <string name="tool_export">Export</string>
+    <string name="tool_save">Save</string>
+    <string name="tool_fit">Fit canvas to screen</string>
+    <string name="tool_mirror">Mirror view</string>
+    <string name="tool_switch_side">Move toolbar to other side</string>
+    <string name="tool_brush_size">Brush size</string>
+    <string name="tool_brush_opacity">Brush opacity</string>
+    <string name="tool_brush_size_value">Size %1$d px</string>
+    <string name="tool_brush_opacity_value">Opacity %1$d%%</string>
+    <string name="tool_current_color_cd">Current color %1$s</string>
+
+    <!-- Brush picker -->
+    <string name="brush_sheet_title">Brushes</string>
+    <string name="brush_pencil_rough">Rough pencil</string>
+    <string name="brush_pencil_smooth">Smooth pencil</string>
+    <string name="brush_pen_technical">Technical pen</string>
+    <string name="brush_pen_brush">Brush pen</string>
+    <string name="brush_marker">Marker</string>
+    <string name="brush_round_hard">Hard round</string>
+    <string name="brush_round_soft">Soft round / airbrush</string>
+    <string name="brush_charcoal">Charcoal</string>
+    <string name="brush_eraser_hard">Hard eraser</string>
+    <string name="brush_eraser_soft">Soft eraser</string>
+    <string name="brush_selected">Selected</string>
+
+    <!-- Color sheet -->
+    <string name="color_sheet_title">Color</string>
+    <string name="color_hex_label">Hex (#RRGGBB)</string>
+    <string name="color_hex_invalid">Enter a color as #RRGGBB, for example #1A2B3C.</string>
+    <string name="color_apply">Apply</string>
+    <string name="color_swatches">Swatches</string>
+    <string name="color_recent">Recent colors</string>
+    <string name="color_swatch_cd">Use color %1$s</string>
+    <string name="color_profile_badge">Profile: sRGB</string>
+
+    <!-- Layer sheet -->
+    <string name="layers_title">Layers</string>
+    <string name="layers_add_raster">Add raster layer</string>
+    <string name="layers_add_vector">Add vector layer</string>
+    <string name="layers_delete">Delete layer</string>
+    <string name="layers_duplicate">Duplicate layer</string>
+    <string name="layers_move_up">Move layer up</string>
+    <string name="layers_move_down">Move layer down</string>
+    <string name="layers_show">Show layer</string>
+    <string name="layers_hide">Hide layer</string>
+    <string name="layers_opacity">Layer opacity</string>
+    <string name="layers_opacity_value">Opacity %1$d%%</string>
+    <string name="layers_blend">Blend mode</string>
+    <string name="layers_alpha_lock">Lock transparency</string>
+    <string name="layers_clip">Clip to layer below</string>
+    <string name="layers_rename">Rename layer</string>
+    <string name="layers_name_label">Layer name</string>
+    <string name="layers_kind_raster">Raster</string>
+    <string name="layers_kind_vector">Vector-eligible</string>
+    <string name="layers_kind_group">Group</string>
+    <string name="layers_select_cd">Select layer %1$s</string>
+    <string name="layers_default_name">Layer %1$d</string>
+    <string name="blend_normal">Normal</string>
+    <string name="blend_multiply">Multiply</string>
+    <string name="blend_screen">Screen</string>
+    <string name="blend_overlay">Overlay</string>
+
+    <!-- Export sheet (MASTER_PLAN §2.3). Keep in sync with org.veskra.kit.ExportCopy. -->
+    <string name="export_sheet_title">Export</string>
+    <string name="export_destination_image">Export image (PNG)</string>
+    <string name="export_destination_photoshop">Export for Photoshop (PSD)</string>
+    <string name="export_destination_illustrator">Export for Illustrator (SVG/PDF)</string>
+    <string name="export_format">File format</string>
+    <string name="export_format_png">PNG</string>
+    <string name="export_format_psd">PSD</string>
+    <string name="export_format_svg">SVG</string>
+    <string name="export_format_pdf">PDF</string>
+    <string name="export_opt_vector">Editable vector strokes</string>
+    <string name="export_opt_vector_help">Ink strokes become editable paths. Pressure strokes become filled outlines.</string>
+    <string name="export_opt_raster">Preserve original appearance</string>
+    <string name="export_opt_raster_help">Textured strokes and effects are embedded as images so the artwork looks the same.</string>
+    <string name="export_opt_profile">Embed color profile</string>
+    <string name="export_opt_profile_help">Writes sRGB color information where the format supports it; otherwise the summary says so.</string>
+    <string name="export_both_off">Select “Editable vector strokes”, “Preserve original appearance”, or both to export SVG or PDF.</string>
+    <string name="export_native_copy">Save a project copy (.veskra)</string>
+    <string name="export_native_copy_help">Keeps layers, editable strokes and brush settings for reopening in Veskra.</string>
+    <string name="export_illustrator_hint">Open the SVG or PDF in Illustrator and use Save As to keep an Illustrator document.</string>
+    <string name="export_preflight_loading">Checking what will be exported…</string>
+    <string name="export_preflight_failed">Could not prepare the export summary: %1$s</string>
+    <string name="export_action">Export</string>
+    <string name="export_in_progress">Exporting…</string>
+    <string name="export_done_title">Export complete</string>
+    <string name="export_done_body">Saved %1$s. %2$d vector objects, %3$d rasterized objects, profile: %4$s.</string>
+    <string name="export_failed_title">Export failed</string>
+    <string name="export_not_verified">The exported file could not be verified, so it was not reported as saved. Try again or choose another location.</string>
+    <string name="export_profile_line">profile: %1$s</string>
+    <plurals name="export_vector_paths">
+        <item quantity="one">%d vector path</item>
+        <item quantity="other">%d vector paths</item>
+    </plurals>
+    <plurals name="export_raster_only_strokes">
+        <item quantity="one">%d raster-only stroke</item>
+        <item quantity="other">%d raster-only strokes</item>
+    </plurals>
+    <plurals name="export_rasterized_layers">
+        <item quantity="one">%d rasterized layer</item>
+        <item quantity="other">%d rasterized layers</item>
+    </plurals>
+
+    <!-- Save status -->
+    <string name="save_status_saved">Saved</string>
+    <string name="save_status_unsaved">Unsaved changes</string>
+    <string name="save_status_never">Not saved yet</string>
+    <string name="save_status_saving">Saving…</string>
+    <string name="save_status_failed">Save failed</string>
+    <string name="save_failed_permission">Veskra no longer has permission to write to that location. Choose the file again.</string>
+    <string name="save_failed_storage_full">Not enough storage space. Free some space and try again.</string>
+    <string name="save_failed_provider">The storage provider could not write the file. Your work is still kept on this device.</string>
+    <string name="save_failed_validation">The project could not be verified before saving. Your previous save was kept.</string>
+    <string name="save_failed_generic">Saving did not finish. Your previous save was kept.</string>
+
+    <!-- Engine availability / errors -->
+    <string name="engine_unavailable_title">Drawing engine unavailable</string>
+    <string name="engine_unavailable_body">This build does not include the native drawing engine (libveskra_ffi.so). Build it with apps/android/scripts/build-rust.sh.</string>
+    <string name="engine_error">Something went wrong: %1$s</string>
+    <string name="open_failed">This file could not be opened. It may be damaged or from a newer Veskra version.</string>
+</resources>

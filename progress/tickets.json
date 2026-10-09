@@ -405,11 +405,15 @@
         "SPK-11"
       ],
       "deliverable": "Tablet opens Gallery and Editor; app rotates; Compose controls handle Back",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "apps/android :app Compose source (gallery, editor, sheets, CanvasView, SAF); :kit 89 JVM tests pass"
+      ],
+      "blockers": [
+        "Android SDK host dl.google.com denied: :app never compiled; no device"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "AND-02",
@@ -421,11 +425,15 @@
         "AND-01"
       ],
       "deliverable": "Create/release native session, byte/slice lifetime rules, exception-to-error mapping, stress JNI tests",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-ffi registry handles + JNI exports; Kotlin :kit NativeBridgeIntegrationTest + CommandVocabularyIntegrationTest PASS against host libveskra_ffi.so (real JNI, x86_64 Linux JVM 21)"
+      ],
+      "blockers": [
+        "Android device JNI run blocked (no NDK/device)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "AND-03",
@@ -1340,11 +1348,15 @@
         "SPK-11"
       ],
       "deliverable": "Checkboxes Vector/Raster/ICC, format choice, disabled invalid state, previews/warnings",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "ExportSheetState (3 independent toggles, both-off blocked, no .ai) tested on JVM; Compose ExportSheet source"
+      ],
+      "blockers": [
+        "UI not runnable: no Android SDK/device"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "AND-08",

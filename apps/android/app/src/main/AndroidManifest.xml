@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Permissions: intentionally NONE.
+      * No INTERNET permission: Veskra is offline-first (MASTER_PLAN §8.4); artwork, brushes and
+        paths never leave the device (AGENTS.md §3).
+      * No READ/WRITE_EXTERNAL_STORAGE / MANAGE_EXTERNAL_STORAGE / READ_MEDIA_*: all user files go
+        through the Storage Access Framework (ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT), which
+        needs no permission (ARCHITECTURE §G).
+    -->
+
+    <!-- Stylus/touch tablets; do not filter out devices without a stylus (finger drawing is allowed). -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!--
+      allowBackup=false + dataExtractionRules excluding everything: cloud backup would upload artwork.
+    -->
+    <application
+        android:name=".VeskraApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Veskra">
+
+        <!--
+          configChanges: rotation / resize / multi-window are handled in-place so the canvas view and
+          its display tiles are not torn down; all state that matters lives in a ViewModel anyway
+          (engine session survives any recreation that still happens, e.g. uiMode/locale).
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

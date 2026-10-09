@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher mark (original, simple geometry: a pencil stroke). Replace once the
+     product identity is approved (README "About the name"). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFF2F2F2"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M34,70 C44,40 58,40 64,56 S78,68 76,38" />
+    <path
+        android:fillColor="#FFE0A040"
+        android:pathData="M70,30 L82,36 L78,42 L66,36 Z" />
+</vector>

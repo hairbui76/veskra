@@ -1,0 +1,9 @@
+# Generated native libraries (scripts/build-rust.sh output) — never commit binaries (AGENTS.md §3).
+/app/src/main/jniLibs/
+/build/
+/kit/build/
+/app/build/
+/.gradle/
+/.kotlin/
+/local.properties
+*.iml
