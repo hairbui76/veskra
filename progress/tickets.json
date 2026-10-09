@@ -70,11 +70,15 @@
       "owner": "BRH",
       "depends": [],
       "deliverable": "Hokusai Android/host build, Pencil/Ink/Texture/Erase fixtures and p95 stroke cost; adopt/reject ADR proposal",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Independent brush engine chosen (ADR-004); host perf + determinism evidence"
+      ],
+      "blockers": [
+        "Hokusai not built/evaluated (sources not fetched; feel needs device)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "SPK-05",
@@ -177,11 +181,13 @@
         "SPK-06"
       ],
       "deliverable": "License table, provenance and transitive deps; flag conflicts with MIT/Apache intent; pin reviewed versions",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "cargo-deny licenses/bans/sources/advisories ok; deny.toml allow-list; SBOM docs/release/sbom.spdx.json (45 shipped crates)"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "SPK-11",
@@ -190,11 +196,15 @@
       "owner": "DSN",
       "depends": [],
       "deliverable": "Editor/gallery/export screens with touch/palm/landscape/portrait states; tablet interaction test script",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Compose screens implemented in apps/android/app (gallery, editor, sheets)"
+      ],
+      "blockers": [
+        "Wireframe/usability validation needs designer + device (B-1/B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "SPK-12",
@@ -254,11 +264,15 @@
         "SPK-12"
       ],
       "deliverable": "Each critical decision signed, fallback and tradeoffs recorded; master docs reconciled",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "ADR-001..016 in adr/ (several Accepted (provisional))"
+      ],
+      "blockers": [
+        "ADR acceptance experiments need device/Adobe evidence (B-2/B-3)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "ARC-03",
@@ -270,11 +284,15 @@
         "ARC-01"
       ],
       "deliverable": "Pinned Rust/Android toolchains; fmt/clippy/test and Gradle build run from clean checkout",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        ".github/workflows/ci.yml (rust, interop, kotlin-kit, android-apk, audit); all jobs' commands run locally except android-apk"
+      ],
+      "blockers": [
+        "CI never executed on GitHub: push denied (B-4); android-apk job unverified (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CORE-01",
@@ -286,11 +304,13 @@
         "ARC-03"
       ],
       "deliverable": "Crates, dependency direction script, `cargo test --workspace`, ADR links and CI",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "Workspace of 15 crates, scripts/check_deps.py layering check, cargo test --workspace 456 pass"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CORE-02",
@@ -477,11 +497,15 @@
         "SPK-03"
       ],
       "deliverable": "Native CPU/Rust tiles visible in Android Canvas/Surface; rotation and surface loss safe",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Rust render_display + Kotlin TileUploadPlanner + CanvasView source"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1); No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-01",
@@ -709,11 +733,15 @@
         "CORE-04"
       ],
       "deliverable": "Invalidate/upload only changed tiles; performance traces and regression",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "Engine reports exact invalidated rects (2000-seed property test); Kotlin uploads only dirty 512px tiles"
+      ],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2) (perf traces)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "DSN-01",
@@ -725,11 +753,15 @@
         "BRH-02"
       ],
       "deliverable": "Preset list, favorites, current brush size/opacity in thumb-reachable UI",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Brush picker / quick tools Compose source"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "DSN-02",
@@ -741,11 +773,15 @@
         "SPK-11"
       ],
       "deliverable": "Left-/right-handed modes, minimum touch targets, distraction-free canvas",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Floating rail, left/right-handed, 48dp targets in Compose source"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "QAP-01",
@@ -758,9 +794,11 @@
         "REN-02"
       ],
       "deliverable": "Test report: no lost/duplicated commits, undo works, memory/latency traces",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
       "impl": "none"
     },
@@ -868,11 +906,13 @@
         "DOC-03"
       ],
       "deliverable": "Tolerance/contiguous/reference layer options, bounded memory, no infinite fill loops",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "raster fill (bounded, maze/termination tests) + engine edit.fill"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "EDIT-02",
@@ -883,11 +923,15 @@
         "DOC-03"
       ],
       "deliverable": "Rect/ellipse/lasso add/subtract, selection mask raster and UI handles",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "AA selections rect/ellipse/lasso + add/subtract/intersect/invert in engine"
+      ],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2) (selection handles UI)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "EDIT-03",
@@ -898,11 +942,15 @@
         "EDIT-02"
       ],
       "deliverable": "Translate/scale/rotate selected content, stable preview and undo",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "Affine transform of selection/layer, exact for integer moves; engine edit.transform"
+      ],
+      "blockers": [
+        "Interactive transform UI not implemented"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-08",
@@ -914,11 +962,13 @@
         "DOC-01"
       ],
       "deliverable": "Confirmed samples, seed, preset/version, geometry field serialized and replay test",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "Confirmed samples, seed, preset JSON, geometry serialized in .veskra (format SAV-001 round trip) and replayed"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "VEC-01",
@@ -966,11 +1016,13 @@
         "DOC-03"
       ],
       "deliverable": "Editable geometry plus raster fallback without double draw, clear eligibility metadata",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "VectorFidelity classification + IllustratorPlan invariant (no double-visible stroke, nothing dropped)"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "DSN-03",
@@ -982,11 +1034,15 @@
         "BRH-07"
       ],
       "deliverable": "Group/layer thumbnails, opacity/blends, hex input, eyedropper, palettes, accessibility",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Layer sheet + color picker Compose source; engine layer/color commands"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "INT-02",
@@ -1039,11 +1095,13 @@
         "DOC-02"
       ],
       "deliverable": "CIE/linear calculations, gamma policy, masks/alpha tests, documented tolerances",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-compose oracle: W3C formulas exact-fraction tables, gamma/linear spaces, COL-006 no halos"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CLR-04",
@@ -1055,11 +1113,15 @@
         "REN-01"
       ],
       "deliverable": "Verified sRGB output on real tablet, no assumed P3; surface metadata diagnostics",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Display path renders sRGB RGBA8 premultiplied; no P3 assumption (ADR-013)"
+      ],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2); COL-011 needs real surface + colorimeter"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "CLR-05",
@@ -1126,11 +1188,15 @@
         "FMT-03"
       ],
       "deliverable": "Create/open/copy error handling and provider-specific documented limitations",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Kotlin SaveStateMachine/SafCopyPlan tested on JVM; app SAF code; engine document.validate"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1); No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-05",
@@ -1199,11 +1265,15 @@
         "FMT-05"
       ],
       "deliverable": "G4 report signed: no unresolved ICC, corrupted save, or stale-version overwrite defects",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Color numeric suite + save/recovery fault tests pass (host)"
+      ],
+      "blockers": [
+        "CLR-04/QAP-03 device parts blocked (B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-06",
@@ -1435,11 +1505,15 @@
         "FMT-07"
       ],
       "deliverable": "SAF output, progress, cancellation, actionable errors and verified completion",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Export runs on immutable snapshot outside the session lock; Kotlin export flow source"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "QAP-04",
@@ -1452,11 +1526,15 @@
         "AND-08"
       ],
       "deliverable": "8+ fixtures tested Photoshop, Krita and Illustrator, pass rate/traces/sign-off",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Open-source cross-app matrix via scripts/interop/run_all.sh (17/17 PASS)"
+      ],
+      "blockers": [
+        "No Adobe Photoshop/Illustrator access (B-3)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-16",
@@ -1467,11 +1545,15 @@
         "QAP-04"
       ],
       "deliverable": "Clear PSD/AI limitations and supported ICC semantics in user guide",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "docs/USER_GUIDE_INTERCHANGE.md draft + docs/COMPATIBILITY.md"
+      ],
+      "blockers": [
+        "Needs QAP-04 Adobe results before publishing"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "INT-04",
@@ -1563,9 +1645,11 @@
         "REN-03"
       ],
       "deliverable": "High-speed-video and Perfetto evidence, p50/p95 event-to-photon methodology",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
       "impl": "none"
     },
@@ -1579,9 +1663,11 @@
         "AND-10"
       ],
       "deliverable": "Min 2 physical GPU/vendor device classes where available, context loss/tearing tests",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
       "impl": "none"
     },
@@ -1595,11 +1681,15 @@
         "QAP-06"
       ],
       "deliverable": "60-min sketch, save while drawing, OOM/thermal/frame pacing and bug list",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Host perf report docs/reports/performance-host.md"
+      ],
+      "blockers": [
+        "No physical stylus tablet / Android device (docs/BLOCKERS.md B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "QAP-08",
@@ -1695,11 +1785,15 @@
         "REL-02"
       ],
       "deliverable": "SPDX/license notices/third-party attribution, dependency and font/icon licensing verified",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "SBOM + THIRD_PARTY_NOTICES for shipped Rust crates (scripts/release/sbom.py)"
+      ],
+      "blockers": [
+        "Android/Kotlin notices need the Android build (B-1)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "REL-04",
@@ -1725,11 +1819,15 @@
         "REL-03"
       ],
       "deliverable": "README, contribution guide, supported devices, build commands, user guides and known issues",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "README quick start, CONTRIBUTING.md, COMMANDS/CONTRACTS/COMPATIBILITY docs"
+      ],
+      "blockers": [
+        "Supported-device list needs hardware data"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "REL-06",
@@ -1771,11 +1869,15 @@
         "REL-02"
       ],
       "deliverable": "No network required for draw/save/export, no unexpected telemetry, permissions audited",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "No network code in Rust; AndroidManifest declares no permissions (no INTERNET)"
+      ],
+      "blockers": [
+        "Android SDK host denied; :app never compiled (B-1); SEC-003 needs device"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "REL-09",

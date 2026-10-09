@@ -1,0 +1,1145 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "veskra-android-shipped-components",
+  "documentNamespace": "https://veskra.invalid/spdx/4cad8c1cac7ef620",
+  "creationInfo": {
+    "created": "2026-10-09T00:00:00Z",
+    "creators": [
+      "Tool: scripts/release/sbom.py"
+    ],
+    "comment": "Cargo.lock sha256 4cad8c1cac7ef62089a972716a3659dc1f6ab6ad2183fb6fa16e6cd981f27362"
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-brush-0.1.0",
+      "name": "veskra-brush",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-color-0.1.0",
+      "name": "veskra-color",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-compose-0.1.0",
+      "name": "veskra-compose",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-core-0.1.0",
+      "name": "veskra-core",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-doc-0.1.0",
+      "name": "veskra-doc",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-engine-0.1.0",
+      "name": "veskra-engine",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-ffi-0.1.0",
+      "name": "veskra-ffi",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-format-0.1.0",
+      "name": "veskra-format",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-input-0.1.0",
+      "name": "veskra-input",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-io-0.1.0",
+      "name": "veskra-io",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-raster-0.1.0",
+      "name": "veskra-raster",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-veskra-vector-0.1.0",
+      "name": "veskra-vector",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NONE",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "MIT OR Apache-2.0",
+      "supplier": "Organization: Veskra contributors",
+      "externalRefs": []
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-adler2-2.0.1",
+      "name": "adler2",
+      "versionInfo": "2.0.1",
+      "downloadLocation": "https://crates.io/crates/adler2/2.0.1",
+      "licenseDeclared": "0BSD OR MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/adler2@2.0.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-bitflags-2.13.2",
+      "name": "bitflags",
+      "versionInfo": "2.13.2",
+      "downloadLocation": "https://crates.io/crates/bitflags/2.13.2",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/bitflags@2.13.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-block-buffer-0.12.1",
+      "name": "block-buffer",
+      "versionInfo": "0.12.1",
+      "downloadLocation": "https://crates.io/crates/block-buffer/0.12.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/block-buffer@0.12.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-bytes-1.12.1",
+      "name": "bytes",
+      "versionInfo": "1.12.1",
+      "downloadLocation": "https://crates.io/crates/bytes/1.12.1",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/bytes@1.12.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-cfg-if-1.0.5",
+      "name": "cfg-if",
+      "versionInfo": "1.0.5",
+      "downloadLocation": "https://crates.io/crates/cfg-if/1.0.5",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/cfg-if@1.0.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-combine-4.6.8",
+      "name": "combine",
+      "versionInfo": "4.6.8",
+      "downloadLocation": "https://crates.io/crates/combine/4.6.8",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/combine@4.6.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-const-oid-0.10.2",
+      "name": "const-oid",
+      "versionInfo": "0.10.2",
+      "downloadLocation": "https://crates.io/crates/const-oid/0.10.2",
+      "licenseDeclared": "Apache-2.0 OR MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/const-oid@0.10.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-cpufeatures-0.3.1",
+      "name": "cpufeatures",
+      "versionInfo": "0.3.1",
+      "downloadLocation": "https://crates.io/crates/cpufeatures/0.3.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/cpufeatures@0.3.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-crc32fast-1.5.2",
+      "name": "crc32fast",
+      "versionInfo": "1.5.2",
+      "downloadLocation": "https://crates.io/crates/crc32fast/1.5.2",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/crc32fast@1.5.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-crypto-common-0.2.2",
+      "name": "crypto-common",
+      "versionInfo": "0.2.2",
+      "downloadLocation": "https://crates.io/crates/crypto-common/0.2.2",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/crypto-common@0.2.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-digest-0.11.3",
+      "name": "digest",
+      "versionInfo": "0.11.3",
+      "downloadLocation": "https://crates.io/crates/digest/0.11.3",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/digest@0.11.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-fdeflate-0.3.7",
+      "name": "fdeflate",
+      "versionInfo": "0.3.7",
+      "downloadLocation": "https://crates.io/crates/fdeflate/0.3.7",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/fdeflate@0.3.7"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-flate2-1.1.10",
+      "name": "flate2",
+      "versionInfo": "1.1.10",
+      "downloadLocation": "https://crates.io/crates/flate2/1.1.10",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/flate2@1.1.10"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-getrandom-0.4.3",
+      "name": "getrandom",
+      "versionInfo": "0.4.3",
+      "downloadLocation": "https://crates.io/crates/getrandom/0.4.3",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/getrandom@0.4.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-hybrid-array-0.4.15",
+      "name": "hybrid-array",
+      "versionInfo": "0.4.15",
+      "downloadLocation": "https://crates.io/crates/hybrid-array/0.4.15",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/hybrid-array@0.4.15"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-itoa-1.0.18",
+      "name": "itoa",
+      "versionInfo": "1.0.18",
+      "downloadLocation": "https://crates.io/crates/itoa/1.0.18",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/itoa@1.0.18"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-jni-0.22.4",
+      "name": "jni",
+      "versionInfo": "0.22.4",
+      "downloadLocation": "https://crates.io/crates/jni/0.22.4",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/jni@0.22.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-jni-macros-0.22.4",
+      "name": "jni-macros",
+      "versionInfo": "0.22.4",
+      "downloadLocation": "https://crates.io/crates/jni-macros/0.22.4",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/jni-macros@0.22.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-jni-sys-0.4.1",
+      "name": "jni-sys",
+      "versionInfo": "0.4.1",
+      "downloadLocation": "https://crates.io/crates/jni-sys/0.4.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/jni-sys@0.4.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-jni-sys-macros-0.4.1",
+      "name": "jni-sys-macros",
+      "versionInfo": "0.4.1",
+      "downloadLocation": "https://crates.io/crates/jni-sys-macros/0.4.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/jni-sys-macros@0.4.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-libc-0.2.190",
+      "name": "libc",
+      "versionInfo": "0.2.190",
+      "downloadLocation": "https://crates.io/crates/libc/0.2.190",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/libc@0.2.190"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-log-0.4.34",
+      "name": "log",
+      "versionInfo": "0.4.34",
+      "downloadLocation": "https://crates.io/crates/log/0.4.34",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/log@0.4.34"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-memchr-2.8.3",
+      "name": "memchr",
+      "versionInfo": "2.8.3",
+      "downloadLocation": "https://crates.io/crates/memchr/2.8.3",
+      "licenseDeclared": "Unlicense OR MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/memchr@2.8.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-miniz-oxide-0.8.9",
+      "name": "miniz_oxide",
+      "versionInfo": "0.8.9",
+      "downloadLocation": "https://crates.io/crates/miniz_oxide/0.8.9",
+      "licenseDeclared": "MIT OR Zlib OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/miniz_oxide@0.8.9"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-miniz-oxide-0.9.1",
+      "name": "miniz_oxide",
+      "versionInfo": "0.9.1",
+      "downloadLocation": "https://crates.io/crates/miniz_oxide/0.9.1",
+      "licenseDeclared": "MIT OR Zlib OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/miniz_oxide@0.9.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-png-0.18.1",
+      "name": "png",
+      "versionInfo": "0.18.1",
+      "downloadLocation": "https://crates.io/crates/png/0.18.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/png@0.18.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-proc-macro2-1.0.107",
+      "name": "proc-macro2",
+      "versionInfo": "1.0.107",
+      "downloadLocation": "https://crates.io/crates/proc-macro2/1.0.107",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/proc-macro2@1.0.107"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-quote-1.0.47",
+      "name": "quote",
+      "versionInfo": "1.0.47",
+      "downloadLocation": "https://crates.io/crates/quote/1.0.47",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/quote@1.0.47"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-serde-1.0.229",
+      "name": "serde",
+      "versionInfo": "1.0.229",
+      "downloadLocation": "https://crates.io/crates/serde/1.0.229",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde@1.0.229"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-serde-core-1.0.229",
+      "name": "serde_core",
+      "versionInfo": "1.0.229",
+      "downloadLocation": "https://crates.io/crates/serde_core/1.0.229",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde_core@1.0.229"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-serde-derive-1.0.229",
+      "name": "serde_derive",
+      "versionInfo": "1.0.229",
+      "downloadLocation": "https://crates.io/crates/serde_derive/1.0.229",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde_derive@1.0.229"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-serde-json-1.0.151",
+      "name": "serde_json",
+      "versionInfo": "1.0.151",
+      "downloadLocation": "https://crates.io/crates/serde_json/1.0.151",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde_json@1.0.151"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-sha2-0.11.0",
+      "name": "sha2",
+      "versionInfo": "0.11.0",
+      "downloadLocation": "https://crates.io/crates/sha2/0.11.0",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/sha2@0.11.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-simd-adler32-0.3.10",
+      "name": "simd-adler32",
+      "versionInfo": "0.3.10",
+      "downloadLocation": "https://crates.io/crates/simd-adler32/0.3.10",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/simd-adler32@0.3.10"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-simd-cesu8-1.2.0",
+      "name": "simd_cesu8",
+      "versionInfo": "1.2.0",
+      "downloadLocation": "https://crates.io/crates/simd_cesu8/1.2.0",
+      "licenseDeclared": "Apache-2.0 OR MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/simd_cesu8@1.2.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-simdutf8-0.1.5",
+      "name": "simdutf8",
+      "versionInfo": "0.1.5",
+      "downloadLocation": "https://crates.io/crates/simdutf8/0.1.5",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/simdutf8@0.1.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-syn-2.0.119",
+      "name": "syn",
+      "versionInfo": "2.0.119",
+      "downloadLocation": "https://crates.io/crates/syn/2.0.119",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/syn@2.0.119"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-syn-3.0.6",
+      "name": "syn",
+      "versionInfo": "3.0.6",
+      "downloadLocation": "https://crates.io/crates/syn/3.0.6",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/syn@3.0.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-thiserror-2.0.21",
+      "name": "thiserror",
+      "versionInfo": "2.0.21",
+      "downloadLocation": "https://crates.io/crates/thiserror/2.0.21",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/thiserror@2.0.21"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-thiserror-impl-2.0.21",
+      "name": "thiserror-impl",
+      "versionInfo": "2.0.21",
+      "downloadLocation": "https://crates.io/crates/thiserror-impl/2.0.21",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/thiserror-impl@2.0.21"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-typenum-1.20.1",
+      "name": "typenum",
+      "versionInfo": "1.20.1",
+      "downloadLocation": "https://crates.io/crates/typenum/1.20.1",
+      "licenseDeclared": "MIT OR Apache-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/typenum@1.20.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-unicode-ident-1.0.26",
+      "name": "unicode-ident",
+      "versionInfo": "1.0.26",
+      "downloadLocation": "https://crates.io/crates/unicode-ident/1.0.26",
+      "licenseDeclared": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/unicode-ident@1.0.26"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-uuid-1.27.0",
+      "name": "uuid",
+      "versionInfo": "1.27.0",
+      "downloadLocation": "https://crates.io/crates/uuid/1.27.0",
+      "licenseDeclared": "Apache-2.0 OR MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/uuid@1.27.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-zlib-rs-0.6.8",
+      "name": "zlib-rs",
+      "versionInfo": "0.6.8",
+      "downloadLocation": "https://crates.io/crates/zlib-rs/0.6.8",
+      "licenseDeclared": "Zlib",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/zlib-rs@0.6.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Rust-zmij-1.0.23",
+      "name": "zmij",
+      "versionInfo": "1.0.23",
+      "downloadLocation": "https://crates.io/crates/zmij/1.0.23",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/zmij@1.0.23"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-core-ktx-1.17.0",
+      "name": "androidx.core:core-ktx",
+      "versionInfo": "1.17.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.core/core-ktx@1.17.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-activity-compose-1.12.4",
+      "name": "androidx.activity:activity-compose",
+      "versionInfo": "1.12.4",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.activity/activity-compose@1.12.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-lifecycle-runtime-compose-2.10.0",
+      "name": "androidx.lifecycle:lifecycle-runtime-compose",
+      "versionInfo": "2.10.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.lifecycle/lifecycle-runtime-compose@2.10.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-lifecycle-viewmodel-compose-2.10.0",
+      "name": "androidx.lifecycle:lifecycle-viewmodel-compose",
+      "versionInfo": "2.10.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.lifecycle/lifecycle-viewmodel-compose@2.10.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-compose-bom-2025.12.00",
+      "name": "androidx.compose:compose-bom",
+      "versionInfo": "2025.12.00",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose/compose-bom@2025.12.00"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-ui-BOM-managed",
+      "name": "androidx.compose.ui:ui",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.ui/ui@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-ui-graphics-BOM-managed",
+      "name": "androidx.compose.ui:ui-graphics",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.ui/ui-graphics@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-ui-tooling-preview-BOM-managed",
+      "name": "androidx.compose.ui:ui-tooling-preview",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.ui/ui-tooling-preview@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-ui-tooling-BOM-managed",
+      "name": "androidx.compose.ui:ui-tooling",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.ui/ui-tooling@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-foundation-BOM-managed",
+      "name": "androidx.compose.foundation:foundation",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.foundation/foundation@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-material3-1.4.0",
+      "name": "androidx.compose.material3:material3",
+      "versionInfo": "1.4.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.compose.material3/material3@1.4.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-input-motionprediction-1.0.0",
+      "name": "androidx.input:input-motionprediction",
+      "versionInfo": "1.0.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/androidx.input/input-motionprediction@1.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-kotlinx-coroutines-android-1.10.2",
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+      "versionInfo": "1.10.2",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.jetbrains.kotlinx/kotlinx-coroutines-android@1.10.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-gradle-8.13.2",
+      "name": "com.android.tools.build:gradle",
+      "versionInfo": "8.13.2",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/com.android.tools.build/gradle@8.13.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-junit-bom-5.14.4",
+      "name": "org.junit:junit-bom",
+      "versionInfo": "5.14.4",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.junit/junit-bom@5.14.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-junit-jupiter-BOM-managed",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.junit.jupiter/junit-jupiter@BOM-managed"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Maven-junit-platform-launcher-BOM-managed",
+      "name": "org.junit.platform:junit-platform-launcher",
+      "versionInfo": "BOM-managed",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "Declared in apps/android/gradle/libs.versions.toml; not resolved (Android build blocked, B-1)",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.junit.platform/junit-platform-launcher@BOM-managed"
+        }
+      ]
+    }
+  ]
+}

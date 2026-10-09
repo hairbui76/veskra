@@ -1,5 +1,11 @@
 # VERIFICATION_MATRIX status (QAP, 2026-10-09)
 
+> **ORCH addendum (later the same day):** QA-D1 (recovery response dirty flag), QA-D2 (permission
+> error code) and QA-D3 (off-canvas stroke cost) were fixed with regression tests; afterwards
+> `scripts/interop/run_all.sh` reported **PASS 17/17, knownDefects: []**, `cargo test --workspace`
+> passed 456 tests (0 failed, 5 ignored benches), and the Kotlin `:kit` suite ran with the host
+> `libveskra_ffi.so`: 89 passed, 0 skipped. Rows below are otherwise unchanged.
+
 Determined by running tests in this session, not by assumption: `cargo test --workspace
 --no-fail-fast` (53 test binaries + doc-tests, 452 tests passed, 0 failed, host), `cargo test -p veskra-qa`, `bash
 scripts/interop/run_all.sh` (17/17 steps PASS, overall `FAIL_KNOWN_DEFECTS`), the 20 000-iteration
