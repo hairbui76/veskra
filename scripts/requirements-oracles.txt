@@ -1,0 +1,6 @@
+# Independent test oracles (test-time only; never shipped). Pinned to the versions used to produce fixtures.
+Pillow==12.3.0
+psd-tools==1.24.0
+pypdf==6.17.0
+colour-science==0.4.7
+numpy==2.5.3
