@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "pencil.smooth",
+  "version": 1,
+  "name": "Smooth pencil",
+  "kind": "pencil",
+  "size_px": 4.0,
+  "min_size_ratio": 0.35,
+  "opacity": 0.9,
+  "flow": 1.0,
+  "spacing_percent": 8.0,
+  "hardness": 0.85,
+  "pressure_size": [[0.0, 0.0], [1.0, 1.0]],
+  "pressure_opacity": [[0.0, 1.0], [1.0, 1.0]],
+  "pressure_flow": [[0.0, 1.0], [1.0, 1.0]],
+  "grain": null,
+  "accumulation": "max",
+  "eraser": false,
+  "vector_eligible": true,
+  "legacy_paper_texture": "none"
+}

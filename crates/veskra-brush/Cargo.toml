@@ -10,7 +10,14 @@ publish.workspace = true
 [dependencies]
 veskra-core.workspace = true
 veskra-raster.workspace = true
+veskra-vector.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+veskra-testkit.workspace = true
+veskra-color.workspace = true
 
 [lints]
 workspace = true

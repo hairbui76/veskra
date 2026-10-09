@@ -35,7 +35,8 @@ pub struct StrokeGeometry {
     pub centerline: BezPath,
     /// Closed variable-width outline, nonzero fill rule (document coordinates).
     pub outline: BezPath,
-    /// Max distance of confirmed samples from `centerline`, document px (PNT-010).
+    /// Max distance of the (stabilized) paint-path points from `centerline`, document px (PNT-010).
+    /// Stabilization is a deterministic function of the stored confirmed samples.
     pub fit_error: f64,
 }
 

@@ -364,11 +364,15 @@
         "SPK-04"
       ],
       "deliverable": "Pressure-sensitive pencil/pen on tiles, seeded deterministic output and tests",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CLR-01",
@@ -519,11 +523,15 @@
         "BRH-01"
       ],
       "deliverable": "Stable preset IDs/settings/serialization; migrate unknown safe fields; asset license audit",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-03",
@@ -534,11 +542,15 @@
         "BRH-02"
       ],
       "deliverable": "Pencil (rough/smooth), ink, pressure taper, samples/goldens and physical pen feel review",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-04",
@@ -549,11 +561,15 @@
         "BRH-03"
       ],
       "deliverable": "Hard/soft eraser, editable pressure curve and edge alpha reference checks",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-05",
@@ -565,11 +581,15 @@
         "AND-03"
       ],
       "deliverable": "User-toggle; replays seeded strokes; controls visible lag, no committed predicted points",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-06",
@@ -581,11 +601,15 @@
         "SPK-04"
       ],
       "deliverable": "Textured brush renders deterministic raster, documents vector eligibility and memory",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "AND-04",
@@ -788,11 +812,15 @@
         "DOC-02"
       ],
       "deliverable": "Raster painting with size/flow/opacity, overlap/alpha goldens",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-brush: 36 tests pass (PNT-001 batch-independent determinism, PNT-003, PNT-004 <=1 LSB drift, goldens); ORCH-verified"
+      ],
+      "blockers": [
+        "Physical pen-feel review (HW) not possible: no stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "EDIT-01",
