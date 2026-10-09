@@ -82,11 +82,20 @@ fn sty007_predicted_never_stored_and_preview_is_pure() {
             t
         };
         let cov_before = r.coverage_tile_count();
-        let mut preview = TileGrid::new();
+        // Precondition: the preview target already holds base ⊕ confirmed stroke.
+        let mut preview = before.clone();
         let pr = r.prediction_preview(&[pred, StrokeSample { x: pred.x + 10.0, ..pred }], &mut preview);
-        assert!(pr.union(&r.bounds()) == pr, "preview rect covers the confirmed bounds");
+        // Only the predicted-dab area is recomposited: outside `pr` the preview is untouched.
+        let probe = r.bounds().union(&pr);
+        for y in probe.y0..probe.y1 {
+            for x in probe.x0..probe.x1 {
+                if !pr.contains(x, y) {
+                    assert_eq!(preview.get_pixel(x, y), before.get_pixel(x, y), "pixel outside preview rect changed");
+                }
+            }
+        }
         if k > 2 {
-            assert!(preview != before, "preview must show predicted dabs");
+            assert!(!pr.is_empty() && preview != before, "preview must show predicted dabs");
         }
         let after = {
             let mut t = TileGrid::new();

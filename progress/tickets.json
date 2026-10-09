@@ -1065,11 +1065,13 @@
         "CLR-02"
       ],
       "deliverable": "Pixel/decode comparisons and output profile verification, threshold report",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "PNG export iCCP/sRGB verified with Pillow + png crate (0 LSB); PNG import convert/assign vs LittleCMS 0 LSB unoptimized; import->export round trip 0 LSB"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-02",

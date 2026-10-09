@@ -145,6 +145,23 @@ pub enum Command {
     LayerSelect { id: String },
     #[serde(rename = "layer.clear")]
     LayerClear { id: String },
+    /// Import a PNG as a new raster layer above the active layer (color-managed, COL-004/005).
+    #[serde(rename = "layer.import_image")]
+    LayerImportImage {
+        path: String,
+        /// `convert` (default, keep appearance) or `assign` (keep numbers).
+        #[serde(default)]
+        handling: Option<String>,
+        /// `assume_srgb` (default) or `reject` for files without a color profile.
+        #[serde(default)]
+        missing_profile: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        x: i32,
+        #[serde(default)]
+        y: i32,
+    },
     #[serde(rename = "layer.list")]
     LayerList,
 
@@ -326,6 +343,7 @@ impl Command {
             Command::LayerSet { .. } => "Layer properties",
             Command::LayerRename { .. } => "Rename layer",
             Command::LayerClear { .. } => "Clear layer",
+            Command::LayerImportImage { .. } => "Import image",
             Command::StrokeCommit => "Stroke",
             Command::SelectionRect { .. }
             | Command::SelectionEllipse { .. }

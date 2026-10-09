@@ -334,9 +334,13 @@ impl StrokeRenderer {
     }
 
     /// Display-only preview of confirmed + `predicted` samples (STY-007). The renderer's
-    /// confirmed state is not changed. Writes and returns `stroke bounds ∪ predicted dabs`;
-    /// the caller should also re-render (via `render_into`) the rect returned by the previous
-    /// preview so stale predicted pixels are restored.
+    /// confirmed state is not changed.
+    ///
+    /// **Precondition:** `target` already holds `base ⊕ confirmed stroke` (i.e. it is kept up to
+    /// date with [`StrokeRenderer::render_into`] for every confirmed dirty rect). Only the area
+    /// touched by the predicted dabs is recomposited and returned, so the cost is O(prediction),
+    /// not O(stroke). The caller restores the previous preview's rect (e.g. by starting from a
+    /// fresh copy of its confirmed tiles) so stale predicted pixels disappear.
     pub fn prediction_preview(&self, predicted: &[StrokeSample], target: &mut TileGrid) -> RectI {
         let mut pipe = self.pipe.clone();
         let mut dirty = RectI::EMPTY;
@@ -349,9 +353,8 @@ impl StrokeRenderer {
                 dirty = dirty.union(&pipe.feed(&self.preset, &self.shape, p, None));
             }
         }
-        let region = self.bounds.union(&dirty);
-        self.composite(&pipe.cov, target, region);
-        region
+        self.composite(&pipe.cov, target, dirty);
+        dirty
     }
 
     /// Finish the stroke (flushes first). Geometry is computed only for vector-eligible presets

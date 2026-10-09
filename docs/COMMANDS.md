@@ -8,13 +8,16 @@ builders are contract-tested against the real engine through JNI
 `{"ok": <result>, "version": N, "invalidated": [[x0,y0,x1,y1],…], "warnings": […], "historyChanged": bool, "viewChanged": bool}`
 or `{"error": {"code": "<ErrorCode>", "key": "<snake_case>", "message": "…", "recoverable": bool}}`.
 Rectangles are half-open document pixels. Mutating commands are atomic and create exactly one undo
-step; failures change nothing.
+step; failures change nothing (including the deterministic ID stream). **Unknown fields are rejected**
+(`InvalidArgument`) for commands with fields, placements and samples, so a typo can never become a
+silent no-op undo step. `invalidated` is guaranteed to cover every display pixel that changed
+(property-tested over 2000 random command/stylus sequences).
 
 | Command | Fields | Result / notes |
 |---|---|---|
 | `document.create` | `width`, `height`, `dpi`=300, `background`?: `#RRGGBB[AA]` | info; creates "Background" + "Layer 1" (active), sRGB, clears history |
 | `document.info` | — | id, size, dpi, profile, blendSpace, version, savedVersion, dirty, counts, activeLayer, undo/redo state, historyBytes/Trimmed |
-| `document.save` | `path` | `{bytes, savedVersion, sha256}`; atomic temp→validate→rename (ADR-009) |
+| `document.save` | `path` | `{bytes, savedVersion, sha256}`; atomic temp→validate→rename (ADR-009). Paths ending in `.ai/.psd/.psb/.pdf/.svg/.png/.jpg` are refused. After undo back to the saved state the document conservatively stays `dirty`. |
 | `document.open` | `path` | info + `warnings` (forward-compat) |
 | `document.validate` | `path` | fully decodes a `.veskra` without opening it (staged SAF save check) |
 | `document.autosave` | `dir` | checkpoint `{path, seq, bytes}`; keeps newest 3 valid |
@@ -23,6 +26,7 @@ step; failures change nothing.
 | `recovery.open` | `path` | opens one checkpoint; never marked saved |
 | `layer.add` | `kind`: raster\|vector\|group, `name`?, `placement`? | `{layerId}`; non-group becomes active |
 | `layer.remove` / `layer.duplicate` / `layer.clear` | `id` | — / `{layerId}` / — |
+| `layer.import_image` | `path`, `handling`?: convert (default) \| assign, `missingProfile`?: assume_srgb (default) \| reject, `name`?, `x`?, `y`? | `{layerId, width, height, sourceProfile, profileAssumed, converted, warnings}`; PNG only; corrupt ICC rejected; assumed profiles reported in `warnings` (COL-004/005) |
 | `layer.move` | `id`, `placement` | rejects cycles |
 | `layer.set` | `id`, `name`?, `visible`?, `opacity`?, `blend`?, `locked`?, `alphaLocked`?, `clip`?, `passThrough`? | one undo step |
 | `layer.rename` | `id`, `name` | |

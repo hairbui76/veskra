@@ -420,6 +420,9 @@ impl Session {
                 self.doc = Some(Arc::new(next));
                 Ok(self.receipt(json!({"activeLayer": id.to_string()})))
             }
+            Command::LayerImportImage { path, handling, missing_profile, name, x, y } => {
+                self.import_image(label, &path, handling.as_deref(), missing_profile.as_deref(), name, x, y)
+            }
             Command::LayerClear { id } => {
                 let id = parse_layer(&id)?;
                 let r = self.mutate(label, |d, _| {
@@ -766,6 +769,12 @@ impl Session {
     }
 
     fn save(&mut self, path: &Path) -> EResult<Receipt> {
+        // Never write a native project under an interchange or Adobe extension (ADR-008: no
+        // file may masquerade as `.ai`, and a `.psd`/`.pdf` name would mislabel the bundle).
+        let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase());
+        if matches!(ext.as_deref(), Some("ai" | "psd" | "psb" | "pdf" | "svg" | "png" | "jpg" | "jpeg")) {
+            return Err(VeskraError::invalid("project files must not use an interchange extension; use .veskra"));
+        }
         if self.live.is_some() {
             return Err(VeskraError::new(ErrorCode::InvalidState, "finish or cancel the current stroke first"));
         }
@@ -921,6 +930,73 @@ impl Session {
             Ok((json!({"empty": d.selection.is_none()}), b))
         })?;
         Ok(self.finish_mutation(r))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn import_image(
+        &mut self,
+        label: &str,
+        path: &str,
+        handling: Option<&str>,
+        missing: Option<&str>,
+        name: Option<String>,
+        x: i32,
+        y: i32,
+    ) -> EResult<Receipt> {
+        use veskra_io::import::{ImportOptions, MissingProfilePolicy, ProfileHandling};
+        let handling = match handling.unwrap_or("convert") {
+            "convert" => ProfileHandling::ConvertToDocument,
+            "assign" => ProfileHandling::AssignDocumentProfile,
+            other => return Err(VeskraError::invalid(format!("unknown handling {other} (convert|assign)"))),
+        };
+        let missing_profile = match missing.unwrap_or("assume_srgb") {
+            "assume_srgb" => MissingProfilePolicy::AssumeSrgb,
+            "reject" => MissingProfilePolicy::Reject,
+            other => return Err(VeskraError::invalid(format!("unknown missingProfile {other} (assume_srgb|reject)"))),
+        };
+        let meta = std::fs::metadata(path)
+            .map_err(|e| VeskraError::new(ErrorCode::Io, format!("cannot read image: {}", e.kind())))?;
+        if meta.len() > veskra_core::limits::MAX_BUNDLE_ENTRY_BYTES {
+            return Err(VeskraError::alloc("image file too large"));
+        }
+        let bytes = std::fs::read(path)
+            .map_err(|e| VeskraError::new(ErrorCode::Io, format!("cannot read image: {}", e.kind())))?;
+        let doc_profile = veskra_color::icc::IccProfile::parse(&self.doc()?.color.icc_bytes)?;
+        let opts = ImportOptions { handling, missing_profile, ..Default::default() };
+        let img = veskra_io::import::import_png(&bytes, &doc_profile, &opts)?;
+        let id = LayerId::from_u128(self.next_id());
+        let warnings = img.warnings.clone();
+        let r = self.mutate(label, |d, _| {
+            let b = d.bounds();
+            let placed = if x == 0 && y == 0 {
+                img.tiles.clone()
+            } else {
+                let m = veskra_core::Affine::translate(x as f64, y as f64);
+                veskra_raster::transform::try_transform_pixels(&img.tiles, None, m, b)?
+            };
+            let mut px = PixelContent::empty();
+            px.tiles = placed;
+            px.raster_edits.push("import".into());
+            let p = resolve_placement(d, PlacementSpec::AboveActive)?;
+            d.add_layer(
+                id,
+                LayerProps::named(name.unwrap_or_else(|| "Imported image".into())),
+                LayerKind::Raster(px),
+                p,
+            )?;
+            d.active_layer = Some(id);
+            let dirty =
+                RectI::new(x, y, x.saturating_add(img.width as i32), y.saturating_add(img.height as i32)).intersect(&b);
+            Ok((
+                json!({"layerId": id.to_string(), "width": img.width, "height": img.height,
+                       "sourceProfile": img.source_profile_name, "profileAssumed": img.profile_assumed,
+                       "converted": img.converted, "warnings": img.warnings}),
+                dirty,
+            ))
+        })?;
+        let mut receipt = self.finish_mutation(r);
+        receipt.warnings.extend(warnings);
+        Ok(receipt)
     }
 
     fn edit_fill(
