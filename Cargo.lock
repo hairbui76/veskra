@@ -589,6 +589,7 @@ dependencies = [
  "serde_json",
  "veskra-core",
  "veskra-engine",
+ "veskra-input",
 ]
 
 [[package]]

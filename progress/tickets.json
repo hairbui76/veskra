@@ -293,11 +293,13 @@
         "CORE-01"
       ],
       "deliverable": "Typed `Document.Create` and session ID, command errors and immutable snapshots, unit tests",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-engine Session/Command (JSON + typed), atomic mutations, 9 integration tests"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CORE-03",
@@ -503,11 +505,13 @@
         "CORE-02"
       ],
       "deliverable": "Begin/Append/Commit/Cancel with one undo boundary and predictable callbacks",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "stroke.begin/samples/commit/cancel: one undo step per stroke, undo refused mid-stroke, cancel leaves no trace (engine tests)"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "INT-01",
@@ -520,11 +524,15 @@
         "FMT-01"
       ],
       "deliverable": "Physical stylus paints then saves/reopens same drawing, CI proof + device screen capture",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "Blocked",
+      "evidence": [
+        "Host: stroke->tiles->composite->.veskra->reopen bit-identical (int01_stroke_save_reopen_identical); Kotlin->JNI->Rust stroke/render/undo/save test passes on host JVM"
+      ],
+      "blockers": [
+        "G1 requires physical stylus tablet + APK (B-1, B-2)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "BRH-02",
@@ -1186,11 +1194,13 @@
         "CORE-02"
       ],
       "deliverable": "Typed request, capability report, cancellation and warnings; UI/API tests",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "Exporter trait, preflight, export_to_path temp+validate+rename, CancelToken; engine export tests"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-07",
@@ -1202,11 +1212,15 @@
         "CLR-05"
       ],
       "deliverable": "RGB/alpha export, sRGB metadata, DPI, decode round-trip thresholds",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io PNG/PSD: merged + layer channels 0 LSB vs Veskra composite; psd-tools 1.24 tree+ICC match, recomposite premul<=1.961; ImageMagick merged match; Pillow PNG tags/pixels exact (docs/reports/psd-interop.md)"
+      ],
+      "blockers": [
+        "Photoshop NOT TESTED (no access, R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-08",
@@ -1219,11 +1233,15 @@
         "DOC-03"
       ],
       "deliverable": "Valid layer tree, names, opacity, supported blends, embedded composite; 8-bit RGB first",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io PNG/PSD: merged + layer channels 0 LSB vs Veskra composite; psd-tools 1.24 tree+ICC match, recomposite premul<=1.961; ImageMagick merged match; Pillow PNG tags/pixels exact (docs/reports/psd-interop.md)"
+      ],
+      "blockers": [
+        "Photoshop NOT TESTED (no access, R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-09",
@@ -1235,11 +1253,15 @@
         "CLR-02"
       ],
       "deliverable": "Resource 1039, correct profile and image mode, source independent readback",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io PNG/PSD: merged + layer channels 0 LSB vs Veskra composite; psd-tools 1.24 tree+ICC match, recomposite premul<=1.961; ImageMagick merged match; Pillow PNG tags/pixels exact (docs/reports/psd-interop.md)"
+      ],
+      "blockers": [
+        "Photoshop NOT TESTED (no access, R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-10",
@@ -1251,11 +1273,15 @@
         "VEC-03"
       ],
       "deliverable": "Unsupported features flatten to visible raster with explicit report, no missing artwork",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-io PNG/PSD: merged + layer channels 0 LSB vs Veskra composite; psd-tools 1.24 tree+ICC match, recomposite premul<=1.961; ImageMagick merged match; Pillow PNG tags/pixels exact (docs/reports/psd-interop.md)"
+      ],
+      "blockers": [
+        "Photoshop NOT TESTED (no access, R-14)"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-11",

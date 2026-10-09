@@ -14,6 +14,10 @@ path = "src/main.rs"
 [dependencies]
 veskra-core.workspace = true
 veskra-engine.workspace = true
+veskra-io.workspace = true
+veskra-format.workspace = true
+veskra-color.workspace = true
+veskra-testkit.workspace = true
 serde_json.workspace = true
 
 [lints]
