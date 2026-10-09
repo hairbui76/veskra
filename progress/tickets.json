@@ -348,11 +348,13 @@
         "CORE-04"
       ],
       "deliverable": "Normal-alpha CPU compose with generated fixture exact expected output",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-compose: 33 tests; 23 blend-table entries vs exact fractions; 400 random pairs vs f64 reference <=1 LSB; ORCH-verified"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "BRH-01",
@@ -745,11 +747,13 @@
         "CORE-03"
       ],
       "deliverable": "Tree operations, IDs, cycle rejection, group composite golden tests",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "doc tree ops + group composite (isolated/pass-through) tests"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "DOC-02",
@@ -761,11 +765,13 @@
         "CLR-01"
       ],
       "deliverable": "Normal/Multiply/Screen/Overlay per documented math with alpha/ICC goldens",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "Normal/Multiply/Screen/Overlay W3C formulas, GammaEncoded+Linear blend spaces (PNT-007 AUTO)"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "DOC-03",
@@ -776,11 +782,15 @@
         "DOC-02"
       ],
       "deliverable": "Mask ordering/edge semantics, stable undo, reference fixtures",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "Clipping (psd-tools semantics), layer masks, alpha lock in brush"
+      ],
       "blockers": [],
-      "notes": [],
-      "impl": "none"
+      "notes": [
+        "Group masks not in schema yet"
+      ],
+      "impl": "partial"
     },
     {
       "id": "DOC-04",

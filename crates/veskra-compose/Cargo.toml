@@ -13,5 +13,8 @@ veskra-raster.workspace = true
 veskra-doc.workspace = true
 veskra-color.workspace = true
 
+[dev-dependencies]
+veskra-testkit.workspace = true
+
 [lints]
 workspace = true
