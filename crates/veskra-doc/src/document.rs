@@ -573,6 +573,19 @@ impl Document {
         }
     }
 
+    /// Clear all pixels and strokes of an editable pixel layer. The (now empty) layer becomes
+    /// exactly vector-representable again; its mask is kept.
+    pub fn clear_pixel_layer(&mut self, id: LayerId) -> DResult<()> {
+        let px = self.pixels_mut_editable(id)?;
+        px.tiles.clear();
+        px.raster_edits.clear();
+        let removed = std::mem::take(&mut px.strokes);
+        for s in removed {
+            self.strokes.remove(&s);
+        }
+        Ok(())
+    }
+
     /// Classify whether the layer's strokes faithfully represent its pixels (VEC-03).
     pub fn vector_fidelity(&self, id: LayerId) -> Option<VectorFidelity> {
         let p = self.layer(id)?.pixels()?;

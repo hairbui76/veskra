@@ -426,11 +426,15 @@
         "ARC-01"
       ],
       "deliverable": "Historical pressure event batches arrive confirmed and ordered in Rust; no per-sample heap abuse",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-input Rust arbitration: 45 tests pass (STY-001/002/004/005/006/007 AUTO), ORCH-verified"
+      ],
+      "blockers": [
+        "HW validation BLOCKED: no physical stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "REN-01",
@@ -587,11 +591,15 @@
         "REN-01"
       ],
       "deliverable": "Pan/zoom/rotate with stable anchor; no stray strokes; repeated gesture tests",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-input Rust arbitration: 45 tests pass (STY-001/002/004/005/006/007 AUTO), ORCH-verified"
+      ],
+      "blockers": [
+        "HW validation BLOCKED: no physical stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "AND-05",
@@ -603,11 +611,15 @@
         "SPK-02"
       ],
       "deliverable": "Stylus/finger arbitration, palm/noise suppression and reliable ACTION_CANCEL rollback",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-input Rust arbitration: 45 tests pass (STY-001/002/004/005/006/007 AUTO), ORCH-verified"
+      ],
+      "blockers": [
+        "HW validation BLOCKED: no physical stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "AND-06",
@@ -619,11 +631,15 @@
         "SPK-02"
       ],
       "deliverable": "Configurable button where hardware supports, hover cursor and no false pressure assumptions",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-input Rust arbitration: 45 tests pass (STY-001/002/004/005/006/007 AUTO), ORCH-verified"
+      ],
+      "blockers": [
+        "HW validation BLOCKED: no physical stylus tablet"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "REN-02",
