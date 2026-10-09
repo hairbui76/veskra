@@ -1,0 +1,16 @@
+[package]
+name = "veskra-brush"
+description = "Brush presets and deterministic dab rasterizer onto tiles (BRH)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+veskra-core.workspace = true
+veskra-raster.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

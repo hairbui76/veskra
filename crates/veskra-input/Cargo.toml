@@ -1,0 +1,15 @@
+[package]
+name = "veskra-input"
+description = "Validated stroke sample pipeline, stroke state machine, pointer/gesture arbitration (AND)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+veskra-core.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

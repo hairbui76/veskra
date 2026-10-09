@@ -1,0 +1,11 @@
+/target/
+**/target/
+*.profraw
+/apps/android/**/build/
+/apps/android/.gradle/
+/apps/android/local.properties
+/apps/android/.kotlin/
+.idea/
+*.iml
+/scratch/
+__pycache__/

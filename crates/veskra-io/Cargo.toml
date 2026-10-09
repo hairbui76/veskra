@@ -1,0 +1,21 @@
+[package]
+name = "veskra-io"
+description = "PNG, PSD, SVG and PDF exporters with preflight and reports (FMT)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+veskra-core.workspace = true
+veskra-raster.workspace = true
+veskra-doc.workspace = true
+veskra-compose.workspace = true
+veskra-color.workspace = true
+veskra-vector.workspace = true
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+
+[lints]
+workspace = true

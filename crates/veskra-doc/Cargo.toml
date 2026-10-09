@@ -1,0 +1,16 @@
+[package]
+name = "veskra-doc"
+description = "Document tree, layers, stroke records, copy-on-write history (ORCH/REN)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+veskra-core.workspace = true
+veskra-raster.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

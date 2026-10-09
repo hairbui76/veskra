@@ -1,0 +1,16 @@
+[package]
+name = "veskra-testkit"
+description = "Golden fixtures, image comparison and generators for tests (QAP)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+veskra-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

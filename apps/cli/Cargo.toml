@@ -1,0 +1,20 @@
+[package]
+name = "veskra-cli"
+description = "Headless Veskra test runner: render fixtures, inspect projects/exports, compare color, benchmark."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "veskra"
+path = "src/main.rs"
+
+[dependencies]
+veskra-core.workspace = true
+veskra-engine.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

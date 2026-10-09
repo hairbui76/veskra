@@ -1,0 +1,1 @@
+//! veskra-ffi: JNI boundary.

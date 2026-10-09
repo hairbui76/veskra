@@ -1,0 +1,72 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/veskra-core",
+    "crates/veskra-color",
+    "crates/veskra-raster",
+    "crates/veskra-input",
+    "crates/veskra-vector",
+    "crates/veskra-brush",
+    "crates/veskra-doc",
+    "crates/veskra-compose",
+    "crates/veskra-format",
+    "crates/veskra-io",
+    "crates/veskra-engine",
+    "crates/veskra-ffi",
+    "crates/veskra-testkit",
+    "apps/cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hairbui76/veskra"
+publish = false
+
+# Every third-party dependency is declared here so versions are reviewed in one place
+# (ADR-001 / SPK-10). Exact resolved versions are pinned by the committed Cargo.lock.
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+uuid = { version = "1.27.0", features = ["v4", "serde"] }
+miniz_oxide = "0.9.1"
+crc32fast = "1.5.2"
+sha2 = "0.11.0"
+jni = "0.22.4"
+# dev-only independent oracles
+png = "0.18.1"
+
+veskra-core = { path = "crates/veskra-core" }
+veskra-color = { path = "crates/veskra-color" }
+veskra-raster = { path = "crates/veskra-raster" }
+veskra-input = { path = "crates/veskra-input" }
+veskra-vector = { path = "crates/veskra-vector" }
+veskra-brush = { path = "crates/veskra-brush" }
+veskra-doc = { path = "crates/veskra-doc" }
+veskra-compose = { path = "crates/veskra-compose" }
+veskra-format = { path = "crates/veskra-format" }
+veskra-io = { path = "crates/veskra-io" }
+veskra-engine = { path = "crates/veskra-engine" }
+veskra-testkit = { path = "crates/veskra-testkit" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+dbg_macro = "deny"
+
+[profile.release]
+debug = 1
+lto = "thin"
+codegen-units = 1
+
+[profile.test]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
