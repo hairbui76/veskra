@@ -476,11 +476,13 @@
         "ARC-01"
       ],
       "deliverable": "Single drawing saves and reopens, checksums and minimum manifest fixture",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-format: 42 tests (SAV-001 round-trip + byte-identical re-encode, SAV-006 hostile archives, SAV-007 future schema, >1000 truncations, 600 byte-flip cases); ORCH-verified"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "CORE-06",
@@ -1056,11 +1058,13 @@
         "BRH-08"
       ],
       "deliverable": "Layer/stroke/brush/profile/tile metadata round-trip and migration fixture",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-format: 42 tests (SAV-001 round-trip + byte-identical re-encode, SAV-006 hostile archives, SAV-007 future schema, >1000 truncations, 600 byte-flip cases); ORCH-verified"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "FMT-03",
@@ -1072,11 +1076,15 @@
         "SPK-08"
       ],
       "deliverable": "Background saves, valid checkpoints, force-stop/storage exhaustion scenarios",
-      "status": "Backlog",
-      "evidence": [],
-      "blockers": [],
+      "status": "In Verification",
+      "evidence": [
+        "Rust atomic save + 690 injected write failures (345 ENOSPC): original intact, no temp leftovers; AutosaveStore"
+      ],
+      "blockers": [
+        "Android force-stop/process-death tests (SAV-008) need device"
+      ],
       "notes": [],
-      "impl": "none"
+      "impl": "partial"
     },
     {
       "id": "FMT-04",
@@ -1102,11 +1110,13 @@
         "FMT-02"
       ],
       "deliverable": "Future schema safe handling, truncated/corrupt/large archive detection",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "veskra-format: 42 tests (SAV-001 round-trip + byte-identical re-encode, SAV-006 hostile archives, SAV-007 future schema, >1000 truncations, 600 byte-flip cases); ORCH-verified"
+      ],
       "blockers": [],
       "notes": [],
-      "impl": "none"
+      "impl": "complete"
     },
     {
       "id": "QAP-02",

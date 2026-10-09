@@ -509,8 +509,12 @@ name = "veskra-cli"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "veskra-color",
  "veskra-core",
  "veskra-engine",
+ "veskra-format",
+ "veskra-io",
+ "veskra-testkit",
 ]
 
 [[package]]
@@ -572,6 +576,7 @@ dependencies = [
  "veskra-input",
  "veskra-io",
  "veskra-raster",
+ "veskra-testkit",
  "veskra-vector",
 ]
 
@@ -620,6 +625,7 @@ version = "0.1.0"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.9.1",
+ "png",
  "serde",
  "serde_json",
  "thiserror",
