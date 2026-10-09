@@ -9,6 +9,7 @@
 //! [`export_to_path`], which only reports success after flush, close and structural validation.
 
 pub mod cancel;
+pub mod import;
 pub mod pdf;
 pub mod plan;
 pub mod png;
