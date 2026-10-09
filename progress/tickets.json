@@ -19,10 +19,15 @@
       "owner": "AND",
       "depends": [],
       "deliverable": "Minimal Gradle+NDK app loads `cdylib` for arm64; JNI passes typed call, no crash; build instruction and device log",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment"
+      ],
+      "notes": [
+        "Rust engine/FFI type-checks for aarch64-linux-android; host-JVM JNI test is interim evidence only"
+      ],
+      "impl": "partial"
     },
     {
       "id": "SPK-02",
@@ -31,10 +36,15 @@
       "owner": "AND",
       "depends": [],
       "deliverable": "Hardware report records pressure/tilt/hover/historical samples, palm/cancel/button behavior on target devices; raw event trace fixture",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment"
+      ],
+      "notes": [
+        "Synthetic event traces only (tests/fixtures/input), labelled SYNTHETIC"
+      ],
+      "impl": "none"
     },
     {
       "id": "SPK-03",
@@ -45,10 +55,13 @@
         "SPK-01"
       ],
       "deliverable": "wgpu/Vulkan or alternate can create/recreate surface on rotate/pause/resume; 100-cycle loop with zero handle use-after-free",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment; ADR-010 defers GPU"
+      ],
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-04",
@@ -60,7 +73,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-05",
@@ -74,7 +88,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-06",
@@ -86,7 +101,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-07",
@@ -98,7 +114,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-08",
@@ -109,10 +126,15 @@
         "SPK-01"
       ],
       "deliverable": "SAF replacement behavior, interrupted write cases, recovery strategy; proof on at least local Documents provider",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment (SAF provider behaviour needs a device)"
+      ],
+      "notes": [
+        "Rust-side staged save/fault injection covered by FMT-03"
+      ],
+      "impl": "none"
     },
     {
       "id": "SPK-09",
@@ -123,10 +145,15 @@
         "SPK-02"
       ],
       "deliverable": "Compare Ink 1.0 and raw MotionEvent->Rust for latency, compatibility and double-model risk; documented selection",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment"
+      ],
+      "notes": [
+        "ADR-003: AndroidX Ink not adopted pending spike"
+      ],
+      "impl": "none"
     },
     {
       "id": "SPK-10",
@@ -141,7 +168,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-11",
@@ -153,7 +181,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "SPK-12",
@@ -164,10 +193,13 @@
         "SPK-02"
       ],
       "deliverable": "Device/GPU/OS matrix; real vs emulator separation, measurement methods, hardware gaps named",
-      "status": "Backlog",
+      "status": "Blocked",
       "evidence": [],
-      "blockers": [],
-      "notes": []
+      "blockers": [
+        "No Android SDK/NDK (dl.google.com denied by network policy), no emulator (no KVM), no physical stylus tablet in this environment; no device inventory"
+      ],
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "ARC-01",
@@ -182,10 +214,15 @@
         "SPK-07"
       ],
       "deliverable": "Reviewed Doc, Stroke, Tile, Color, Export, Command and FFI schemas with API tests",
-      "status": "Backlog",
-      "evidence": [],
+      "status": "In Verification",
+      "evidence": [
+        "crates/veskra-core (18 tests) + docs/CONTRACTS.md + ADR-016"
+      ],
       "blockers": [],
-      "notes": []
+      "notes": [
+        "Depends on SPK-01/04/05/06/07 evidence; contracts accepted provisionally by ORCH"
+      ],
+      "impl": "complete"
     },
     {
       "id": "ARC-02",
@@ -208,7 +245,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "ARC-03",
@@ -223,7 +261,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CORE-01",
@@ -238,7 +277,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CORE-02",
@@ -252,7 +292,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CORE-03",
@@ -270,7 +311,8 @@
       "blockers": [],
       "notes": [
         "Serde/migration part lands with veskra-format (FMT-02)"
-      ]
+      ],
+      "impl": "partial"
     },
     {
       "id": "CORE-04",
@@ -281,14 +323,16 @@
         "CORE-01"
       ],
       "deliverable": "Dirty tile allocation/read/write, tile coordinate math, memory limits and golden tests",
-      "status": "Done",
+      "status": "In Verification",
       "evidence": [
         "cargo test -p veskra-raster: 33 unit + 13 integration passed (2 ignored benches), clippy/fmt clean, ORCH-verified 2026-10-09"
       ],
       "blockers": [],
       "notes": [
-        "Host benches (release, container CPU): 20k 32px rects 1.24s; fill 4096^2 78ms"
-      ]
+        "Host benches (release, container CPU): 20k 32px rects 1.24s; fill 4096^2 78ms",
+        "Gate chain: CORE-01 <- ARC-01/ARC-03 <- SPK-01 (hardware, BLOCKED)"
+      ],
+      "impl": "complete"
     },
     {
       "id": "CORE-05",
@@ -303,7 +347,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-01",
@@ -318,7 +363,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CLR-01",
@@ -333,7 +379,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-01",
@@ -349,7 +396,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-02",
@@ -364,7 +412,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-03",
@@ -380,7 +429,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REN-01",
@@ -396,7 +446,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-01",
@@ -412,7 +463,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CORE-06",
@@ -428,7 +480,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "INT-01",
@@ -444,7 +497,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-02",
@@ -458,7 +512,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-03",
@@ -472,7 +527,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-04",
@@ -486,7 +542,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-05",
@@ -501,7 +558,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-06",
@@ -516,7 +574,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-04",
@@ -531,7 +590,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-05",
@@ -546,7 +606,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-06",
@@ -561,7 +622,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REN-02",
@@ -576,7 +638,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DSN-01",
@@ -591,7 +654,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DSN-02",
@@ -606,7 +670,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-01",
@@ -622,7 +687,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DOC-01",
@@ -636,7 +702,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DOC-02",
@@ -651,7 +718,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DOC-03",
@@ -665,7 +733,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DOC-04",
@@ -684,7 +753,8 @@
       "blockers": [],
       "notes": [
         "Awaits engine integration (CORE-06)"
-      ]
+      ],
+      "impl": "partial"
     },
     {
       "id": "BRH-07",
@@ -699,7 +769,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "EDIT-01",
@@ -713,7 +784,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "EDIT-02",
@@ -727,7 +799,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "EDIT-03",
@@ -741,7 +814,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "BRH-08",
@@ -756,7 +830,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "VEC-01",
@@ -770,7 +845,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "VEC-02",
@@ -784,7 +860,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "VEC-03",
@@ -799,7 +876,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DSN-03",
@@ -814,7 +892,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "INT-02",
@@ -832,7 +911,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CLR-02",
@@ -847,7 +927,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CLR-03",
@@ -862,7 +943,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CLR-04",
@@ -877,7 +959,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "CLR-05",
@@ -891,7 +974,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-02",
@@ -907,7 +991,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-03",
@@ -922,7 +1007,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-04",
@@ -936,7 +1022,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-05",
@@ -950,7 +1037,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-02",
@@ -965,7 +1053,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-03",
@@ -980,7 +1069,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "INT-03",
@@ -997,7 +1087,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-06",
@@ -1012,7 +1103,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-07",
@@ -1027,7 +1119,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-08",
@@ -1043,7 +1136,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-09",
@@ -1058,7 +1152,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-10",
@@ -1073,7 +1168,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-11",
@@ -1088,7 +1184,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-12",
@@ -1103,7 +1200,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-13",
@@ -1118,7 +1216,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-14",
@@ -1134,7 +1233,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-15",
@@ -1149,7 +1249,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-07",
@@ -1164,7 +1265,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-08",
@@ -1179,7 +1281,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-04",
@@ -1195,7 +1298,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "FMT-16",
@@ -1209,7 +1313,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "INT-04",
@@ -1224,7 +1329,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REN-03",
@@ -1240,7 +1346,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REN-04",
@@ -1255,7 +1362,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-09",
@@ -1270,7 +1378,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "AND-10",
@@ -1284,7 +1393,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-05",
@@ -1299,7 +1409,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-06",
@@ -1314,7 +1425,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-07",
@@ -1329,7 +1441,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "QAP-08",
@@ -1344,7 +1457,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "DSN-04",
@@ -1359,7 +1473,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "INT-05",
@@ -1377,7 +1492,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-01",
@@ -1392,7 +1508,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-02",
@@ -1406,7 +1523,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-03",
@@ -1421,7 +1539,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-04",
@@ -1435,7 +1554,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-05",
@@ -1449,7 +1569,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-06",
@@ -1464,7 +1585,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-07",
@@ -1478,7 +1600,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-08",
@@ -1492,7 +1615,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-09",
@@ -1506,7 +1630,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-10",
@@ -1520,7 +1645,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "REL-11",
@@ -1543,7 +1669,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-01",
@@ -1557,7 +1684,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-02",
@@ -1572,7 +1700,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-03",
@@ -1586,7 +1715,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-04",
@@ -1600,7 +1730,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-05",
@@ -1614,7 +1745,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-06",
@@ -1628,7 +1760,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-07",
@@ -1642,7 +1775,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-08",
@@ -1656,7 +1790,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-09",
@@ -1670,7 +1805,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-10",
@@ -1684,7 +1820,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     },
     {
       "id": "NEXT-11",
@@ -1699,7 +1836,8 @@
       "status": "Backlog",
       "evidence": [],
       "blockers": [],
-      "notes": []
+      "notes": [],
+      "impl": "none"
     }
   ],
   "updated": "2026-10-09"

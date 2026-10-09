@@ -10,7 +10,10 @@ Rules enforced by `check` (MASTER_PLAN §12, AGENTS.md §4):
   * status in the allowed set;
   * Done requires >= 1 evidence entry and every dependency Done;
   * Blocked requires >= 1 blocker entry;
-  * In Verification is used when implementation exists but required evidence (HW/ADOBE/...) is missing.
+  * In Verification is used when implementation exists but required evidence (HW/ADOBE/...) is missing
+    or an upstream gate (e.g. a hardware spike) is still open;
+  * `impl` (none|partial|complete) records implementation progress separately from gate status, so
+    "code complete, gate blocked on hardware" is visible without faking Done.
 """
 import json, re, sys, argparse, pathlib, datetime
 
@@ -71,6 +74,7 @@ def cmd_init(_):
         t["evidence"] = prev.get("evidence", [])
         t["blockers"] = prev.get("blockers", [])
         t["notes"] = prev.get("notes", [])
+        t["impl"] = prev.get("impl", "none")
         out.append(t)
     save({"schema": 1, "source": "ROADMAP.md", "statuses": STATUSES, "tickets": out})
     print(f"{len(out)} tickets")
@@ -85,6 +89,8 @@ def cmd_set(a):
         sys.exit(f"bad status {a.status}; one of {STATUSES}")
     t = by[a.id]
     t["status"] = a.status
+    if a.impl:
+        t["impl"] = a.impl
     t["evidence"] += a.evidence or []
     if a.clear_blockers:
         t["blockers"] = []
@@ -100,7 +106,8 @@ def cmd_summary(_):
         phases.setdefault(t["phase"], {}).setdefault(t["status"], []).append(t["id"])
     for p in sorted(phases):
         counts = ", ".join(f"{s}: {len(v)}" for s, v in sorted(phases[p].items(), key=lambda kv: STATUSES.index(kv[0])))
-        print(f"{p}: {counts}")
+        impl = sum(1 for t in data["tickets"] if t["phase"] == p and t.get("impl") == "complete")
+        print(f"{p}: {counts}  | impl complete: {impl}")
 
 
 def cmd_check(_):
@@ -119,6 +126,8 @@ def cmd_check(_):
             for d in t["depends"]:
                 if d in by and by[d]["status"] != "Done":
                     errs.append(f"{t['id']}: Done but dependency {d} is {by[d]['status']}")
+        if t.get("impl", "none") not in ("none", "partial", "complete"):
+            errs.append(f"{t['id']}: invalid impl {t.get('impl')}")
         if t["status"] == "Blocked" and not t["blockers"]:
             errs.append(f"{t['id']}: Blocked without blocker description")
     if errs:
@@ -133,7 +142,7 @@ sub.add_parser("init").set_defaults(f=cmd_init)
 s = sub.add_parser("set")
 s.add_argument("id"); s.add_argument("status")
 s.add_argument("--evidence", action="append"); s.add_argument("--blocker", action="append")
-s.add_argument("--note", action="append"); s.add_argument("--clear-blockers", action="store_true")
+s.add_argument("--note", action="append"); s.add_argument("--impl", choices=["none", "partial", "complete"]); s.add_argument("--clear-blockers", action="store_true")
 s.set_defaults(f=cmd_set)
 sub.add_parser("summary").set_defaults(f=cmd_summary)
 sub.add_parser("check").set_defaults(f=cmd_check)
