@@ -22,7 +22,7 @@ use crate::{MAX_RECT_PIXELS, MaskGrid, Px16, RasterError, TILE_I, TILE_U, Tile, 
 
 /// Sub-pixel quantization of sample positions (bits).
 pub const SUBPIXEL_BITS: u32 = 8;
-const ONE: i64 = 1 << SUBPIXEL_BITS;
+pub(crate) const ONE: i64 = 1 << SUBPIXEL_BITS;
 
 /// Transform `src` (restricted to `region` coverage if given) by `m`, producing pixels only
 /// inside `clip`. Returns an empty grid for a singular/non-finite `m` or when the
@@ -181,15 +181,15 @@ fn integer_translation(m: &Affine) -> Option<(i64, i64)> {
     (m.a == 1.0 && m.b == 0.0 && m.c == 0.0 && m.d == 1.0 && int(m.e) && int(m.f)).then_some((m.e as i64, m.f as i64))
 }
 
-struct Limits {
-    x0: f64,
-    y0: f64,
-    x1: f64,
-    y1: f64,
+pub(crate) struct Limits {
+    pub(crate) x0: f64,
+    pub(crate) y0: f64,
+    pub(crate) x1: f64,
+    pub(crate) y1: f64,
 }
 
 /// Sample-space region outside which every bilinear tap is transparent.
-fn sb_limits(sb: RectI) -> Limits {
+pub(crate) fn sb_limits(sb: RectI) -> Limits {
     Limits { x0: sb.x0 as f64 - 1.0, y0: sb.y0 as f64 - 1.0, x1: sb.x1 as f64, y1: sb.y1 as f64 }
 }
 
@@ -207,7 +207,7 @@ fn sample_pos(inv: &Affine, x: i32, y: i32, lim: &Limits) -> Option<(i64, i64)> 
     Some((q(sx), q(sy)))
 }
 
-fn bilinear(sx: i64, sy: i64, mut fetch: impl FnMut(i64, i64) -> Px16) -> Px16 {
+pub(crate) fn bilinear(sx: i64, sy: i64, mut fetch: impl FnMut(i64, i64) -> Px16) -> Px16 {
     let (x0, y0) = (sx >> SUBPIXEL_BITS, sy >> SUBPIXEL_BITS);
     let (wx, wy) = ((sx & (ONE - 1)) as u64, (sy & (ONE - 1)) as u64);
     let one = ONE as u64;
@@ -228,7 +228,7 @@ fn bilinear(sx: i64, sy: i64, mut fetch: impl FnMut(i64, i64) -> Px16) -> Px16 {
     [r(acc[0]), r(acc[1]), r(acc[2]), r(acc[3])]
 }
 
-fn bilinear1(sx: i64, sy: i64, fetch: impl Fn(i64, i64) -> u32) -> u32 {
+pub(crate) fn bilinear1(sx: i64, sy: i64, fetch: impl Fn(i64, i64) -> u32) -> u32 {
     let (x0, y0) = (sx >> SUBPIXEL_BITS, sy >> SUBPIXEL_BITS);
     let (wx, wy) = ((sx & (ONE - 1)) as u64, (sy & (ONE - 1)) as u64);
     let one = ONE as u64;
@@ -247,14 +247,14 @@ fn bilinear1(sx: i64, sy: i64, fetch: impl Fn(i64, i64) -> u32) -> u32 {
 }
 
 /// One-entry tile cache for source fetches.
-struct Cache<'a> {
-    grid: &'a TileGrid,
-    key: Option<TileCoord>,
-    tile: Option<&'a Arc<Tile>>,
+pub(crate) struct Cache<'a> {
+    pub(crate) grid: &'a TileGrid,
+    pub(crate) key: Option<TileCoord>,
+    pub(crate) tile: Option<&'a Arc<Tile>>,
 }
 
 impl Cache<'_> {
-    fn get(&mut self, x: i64, y: i64) -> Px16 {
+    pub(crate) fn get(&mut self, x: i64, y: i64) -> Px16 {
         if x < i32::MIN as i64 || x > i32::MAX as i64 || y < i32::MIN as i64 || y > i32::MAX as i64 {
             return [0; 4];
         }

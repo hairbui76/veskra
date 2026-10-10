@@ -42,6 +42,13 @@ pub const IDENTITY_MATRIX_TOL: f64 = 5e-4;
 /// (≈ 0.13 LSB at 8 bits).
 pub const IDENTITY_CURVE_TOL: f64 = 5e-4;
 
+/// A destination linear-light channel must leave `[0, 1]` by more than this before a color counts
+/// as out of gamut. ICC colorants are stored as s15Fixed16 (steps of 1.5e-5), so two profiles
+/// that share a primary (sRGB / Display P3 / Adobe RGB blue, sRGB / Adobe RGB red) map it to a
+/// channel value of about ±3e-5 instead of exactly 0; the tolerance has to sit above that noise.
+/// 1e-4 in linear light is below 0.1 ΔE00 and at most 1/3 of an 8-bit code.
+pub const GAMUT_CLIP_EPS: f64 = 1e-4;
+
 /// ICC rendering intent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum RenderingIntent {
@@ -206,6 +213,35 @@ impl RgbTransform {
         [self.dst_trc[0].eval_inverse(d[0]), self.dst_trc[1].eval_inverse(d[1]), self.dst_trc[2].eval_inverse(d[2])]
     }
 
+    /// [`apply_f64`](Self::apply_f64) that also reports whether the color was outside the
+    /// destination gamut (a destination linear channel beyond `[0, 1]` by more than
+    /// [`GAMUT_CLIP_EPS`]) and therefore clipped. Always `false` for identity transforms.
+    pub fn apply_f64_checked(&self, rgb: [f64; 3]) -> ([f64; 3], bool) {
+        let rgb = rgb.map(|v| if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) });
+        if self.identity {
+            return (rgb, false);
+        }
+        let lin = [self.src_trc[0].eval(rgb[0]), self.src_trc[1].eval(rgb[1]), self.src_trc[2].eval(rgb[2])];
+        let raw = math::mul_vec(&self.matrix, lin);
+        let clipped = raw.iter().any(|v| *v < -GAMUT_CLIP_EPS || *v > 1.0 + GAMUT_CLIP_EPS);
+        let d = [raw[0].clamp(0.0, 1.0), raw[1].clamp(0.0, 1.0), raw[2].clamp(0.0, 1.0)];
+        (
+            [
+                self.dst_trc[0].eval_inverse(d[0]),
+                self.dst_trc[1].eval_inverse(d[1]),
+                self.dst_trc[2].eval_inverse(d[2]),
+            ],
+            clipped,
+        )
+    }
+
+    /// Whether every source color is inside the destination gamut, i.e. no input can be clipped:
+    /// all three source primaries map to non-negative destination linear RGB (white maps to
+    /// white, so the whole source gamut then lies inside the destination's). Identity → `true`.
+    pub fn source_gamut_fits(&self) -> bool {
+        self.identity || self.matrix.iter().flatten().all(|v| *v >= -GAMUT_CLIP_EPS)
+    }
+
     /// Transform one encoded RGB triple (encoded in → encoded out, inputs clamped to `[0,1]`).
     pub fn apply(&self, rgb: [f32; 3]) -> [f32; 3] {
         if self.identity {
@@ -258,6 +294,33 @@ impl RgbTransform {
                 p[c] = ((enc[c] * af + 0.5).floor() as u16).min(a);
             }
         }
+    }
+}
+
+impl RgbTransform {
+    /// [`apply_rgba16_premul`](Self::apply_rgba16_premul) that returns how many pixels with
+    /// alpha > 0 were outside the destination gamut and clipped (see
+    /// [`apply_f64_checked`](Self::apply_f64_checked)). Pixel results are identical.
+    pub fn apply_rgba16_premul_counting(&self, px: &mut [u16]) -> u64 {
+        if self.identity {
+            return 0;
+        }
+        let mut clipped = 0u64;
+        for p in px.chunks_exact_mut(4) {
+            let a = p[3];
+            if a == 0 {
+                p[..3].fill(0);
+                continue;
+            }
+            let af = a as f64;
+            let straight = [(p[0] as f64 / af).min(1.0), (p[1] as f64 / af).min(1.0), (p[2] as f64 / af).min(1.0)];
+            let (enc, c) = self.apply_f64_checked(straight);
+            clipped += c as u64;
+            for k in 0..3 {
+                p[k] = ((enc[k] * af + 0.5).floor() as u16).min(a);
+            }
+        }
+        clipped
     }
 }
 
@@ -425,6 +488,70 @@ mod tests {
         assert!(t.is_identity(), "v4 display profiles have D50 media white");
         assert_eq!(RenderingIntent::AbsoluteColorimetric.as_str(), "absolute-colorimetric");
         assert_eq!(RenderingIntent::Saturation.icc_code(), 2);
+    }
+
+    #[test]
+    fn gamut_containment_and_clip_counting() {
+        let (s, p, a) = (IccProfile::srgb(), IccProfile::display_p3(), IccProfile::adobe_rgb_compatible());
+        let rel = RenderingIntent::RelativeColorimetric;
+        // sRGB is inside both wide gamuts; the reverse directions (and P3 <-> Adobe) can clip.
+        assert!(RgbTransform::new(&s, &p, rel).unwrap().source_gamut_fits());
+        assert!(RgbTransform::new(&s, &a, rel).unwrap().source_gamut_fits());
+        assert!(RgbTransform::new(&s, &s, rel).unwrap().source_gamut_fits());
+        for (src, dst) in [(&p, &s), (&a, &s), (&p, &a), (&a, &p)] {
+            assert!(!RgbTransform::new(src, dst, rel).unwrap().source_gamut_fits());
+        }
+        // Counting variant: identical pixels, exact count of clipped (alpha > 0) pixels.
+        let back = RgbTransform::new(&p, &s, rel).unwrap();
+        let mut px = vec![
+            0, 65535, 0, 65535, // P3 green: outside sRGB
+            0, 20000, 0, 20000, // the same color at 30 % alpha: still outside
+            30000, 30000, 30000, 65535, // gray: inside
+            65535, 65535, 65535, 65535, // white: inside (maps to white)
+            0, 0, 0, 0, // transparent: never counted
+            65535, 0, 0, 65535, // P3 red: outside
+        ];
+        let mut plain = px.clone();
+        back.apply_rgba16_premul(&mut plain);
+        assert_eq!(back.apply_rgba16_premul_counting(&mut px), 3);
+        assert_eq!(px, plain);
+        // No sRGB color is reported as clipped on the way into a wider gamut, including the
+        // primaries the profiles share (their ICC colorants differ only by s15Fixed16 rounding).
+        for dst in [&p, &a] {
+            let t = RgbTransform::new(&s, dst, rel).unwrap();
+            for r in (0..=255).step_by(51) {
+                for g in (0..=255).step_by(51) {
+                    for b in (0..=255).step_by(51) {
+                        let (_, clipped) = t.apply_f64_checked([r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0]);
+                        assert!(!clipped, "({r},{g},{b})");
+                    }
+                }
+            }
+        }
+        let id = RgbTransform::new(&s, &s, rel).unwrap();
+        assert_eq!(id.apply_rgba16_premul_counting(&mut px), 0);
+        assert_eq!(id.apply_f64_checked([0.25, 0.5, 2.0]), ([0.25, 0.5, 1.0], false));
+    }
+
+    #[test]
+    fn adobe_rgb_compatible_profile_is_deterministic_and_round_trips() {
+        let a = IccProfile::adobe_rgb_compatible();
+        let again = crate::icc::build_rgb_profile_bytes(&crate::icc::RgbProfileSpec::adobe_rgb_compatible()).unwrap();
+        assert_eq!(a.bytes(), again.as_slice());
+        let parsed = IccProfile::parse(a.bytes()).unwrap();
+        assert_eq!(parsed.id(), a.id());
+        // Pure gamma 563/256 survives the s15Fixed16 encoding exactly.
+        assert!(
+            matches!(parsed.trc(0), Some(crate::transfer::ToneCurve::Gamma(g)) if *g == 563.0 / 256.0)
+                || parsed.trc(0).is_some_and(|c| (c.eval(0.5) - 0.5f64.powf(563.0 / 256.0)).abs() < 1e-12)
+        );
+        let (to, back) = (full(&IccProfile::srgb(), &a), full(&a, &IccProfile::srgb()));
+        for c in [[0.2, 0.5, 0.8], [1.0, 1.0, 1.0], [0.0, 0.0, 0.0], [0.9, 0.1, 0.4]] {
+            let r = back.apply_f64(to.apply_f64(c));
+            for i in 0..3 {
+                assert!((r[i] - c[i]).abs() < 1e-9, "{c:?} -> {r:?}");
+            }
+        }
     }
 
     #[test]

@@ -44,7 +44,47 @@ impl ExportFormat {
     }
 }
 
-/// The three independent toggles of the export sheet (MASTER_PLAN §2.3).
+/// Target color space of an export (owner-approved contract extension, 2026-10-10).
+///
+/// Pixels are converted from the document working space with the **relative colorimetric**
+/// intent (matrix/TRC profiles; out-of-gamut colors are clipped per channel and counted in the
+/// report) and the matching ICC profile is embedded. When the document already is in the
+/// target space nothing is converted and the document's own profile bytes are embedded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ExportProfile {
+    /// Keep the document working space (default; sRGB for every document Veskra can author).
+    /// PNG/PSD embed the document profile unconverted; SVG/PDF, which Veskra always writes as
+    /// sRGB unless a wide-gamut target is chosen, behave as [`ExportProfile::Srgb`].
+    #[default]
+    Document,
+    /// sRGB IEC 61966-2.1.
+    Srgb,
+    /// Display P3 (DCI-P3 primaries, D65, sRGB curve).
+    DisplayP3,
+    /// Veskra's generated profile with the colorimetry of Adobe RGB (1998).
+    AdobeRgb,
+}
+
+impl ExportProfile {
+    /// Stable machine name (same as the serialized form).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExportProfile::Document => "document",
+            ExportProfile::Srgb => "srgb",
+            ExportProfile::DisplayP3 => "display_p3",
+            ExportProfile::AdobeRgb => "adobe_rgb",
+        }
+    }
+
+    /// A wide-gamut target whose values are meaningless without the embedded profile.
+    pub fn requires_embedding(self) -> bool {
+        matches!(self, ExportProfile::DisplayP3 | ExportProfile::AdobeRgb)
+    }
+}
+
+/// The three independent toggles of the export sheet (MASTER_PLAN §2.3) plus the color target.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportOptions {
@@ -57,10 +97,21 @@ pub struct ExportOptions {
     /// Optional output scale for raster formats (1.0 = document pixels). Must be in (0, 4].
     #[serde(default = "one")]
     pub raster_scale: f32,
+    /// Target color space (default `document`). Old JSON without this field keeps its behaviour.
+    #[serde(default)]
+    pub profile: ExportProfile,
+    /// Bits per channel: `8` (default) or `16`. 16-bit output exists for PNG and PSD; SVG/PDF
+    /// always write 8-bit images and report that.
+    #[serde(default = "eight")]
+    pub bit_depth: u8,
 }
 
 fn one() -> f32 {
     1.0
+}
+
+fn eight() -> u8 {
+    8
 }
 
 impl Default for ExportOptions {
@@ -70,6 +121,8 @@ impl Default for ExportOptions {
             include_raster_appearance: true,
             embed_color_profile: true,
             raster_scale: 1.0,
+            profile: ExportProfile::Document,
+            bit_depth: 8,
         }
     }
 }
@@ -85,6 +138,16 @@ impl ExportOptions {
         }
         if !(self.raster_scale.is_finite() && self.raster_scale > 0.0 && self.raster_scale <= 4.0) {
             return Err(VeskraError::new(ErrorCode::InvalidArgument, "raster_scale must be in (0, 4]"));
+        }
+        if self.bit_depth != 8 && self.bit_depth != 16 {
+            return Err(VeskraError::new(ErrorCode::InvalidArgument, "bitDepth must be 8 or 16"));
+        }
+        if self.profile.requires_embedding() && !self.embed_color_profile {
+            // Untagged wide-gamut values would be read as sRGB by every other application.
+            return Err(VeskraError::new(
+                ErrorCode::IncompatibleOutputProfile,
+                "A Display P3 or Adobe RGB export must embed its color profile; enable 'Embed color profile' or choose sRGB.",
+            ));
         }
         Ok(())
     }
@@ -115,6 +178,14 @@ pub enum ExportWarningKind {
     HiddenLayer,
     /// Clipping/alpha-lock semantics approximated.
     ClippingApproximated,
+    /// Pixels were converted from the document profile to the chosen target profile.
+    ColorConverted,
+    /// Colors outside the target gamut were (or may be) clipped; `count` = affected pixels.
+    GamutClipped,
+    /// The format cannot carry the target profile for vector colors; they stay sRGB values.
+    VectorColorsSrgb,
+    /// The requested bit depth is not available for this format; 8-bit was written.
+    BitDepthReduced,
     /// Anything else, described in the message.
     Other,
 }
@@ -149,6 +220,18 @@ pub struct ExportPreflight {
     pub height_px: u32,
     pub estimated_bytes: u64,
     pub warnings: Vec<ExportWarning>,
+    /// Name of the color space the pixel values will be written in (e.g. `"Display P3"`).
+    #[serde(default)]
+    pub target_profile: String,
+    /// Bits per channel that will actually be written (8 or 16).
+    #[serde(default = "eight")]
+    pub bit_depth: u8,
+    /// `"relative-colorimetric"` when pixels will be converted, `None` when written unconverted.
+    #[serde(default)]
+    pub rendering_intent: Option<String>,
+    /// The document's colors can fall outside the target gamut (clipping is counted on export).
+    #[serde(default)]
+    pub gamut_clipping_possible: bool,
 }
 
 /// Validation outcome for a written file.
@@ -182,6 +265,19 @@ pub struct ExportReport {
     pub width_px: u32,
     pub height_px: u32,
     pub validation: ValidationStatus,
+    /// Name of the color space the pixel values were written in.
+    #[serde(default)]
+    pub target_profile: String,
+    /// Bits per channel actually written (8 or 16).
+    #[serde(default = "eight")]
+    pub bit_depth: u8,
+    /// `"relative-colorimetric"` when pixels were converted, `None` when written unconverted.
+    #[serde(default)]
+    pub rendering_intent: Option<String>,
+    /// Pixels (alpha > 0) of the written image(s) whose color was outside the target gamut and
+    /// was clipped. PNG/PSD: the flattened image; SVG/PDF: all embedded raster images.
+    #[serde(default)]
+    pub out_of_gamut_pixels: u64,
 }
 
 #[cfg(test)]
@@ -211,7 +307,7 @@ mod tests {
         let j = serde_json::to_string(&ExportOptions::default()).unwrap();
         assert_eq!(
             j,
-            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0}"#
+            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0,"profile":"document","bitDepth":8}"#
         );
         let o: ExportOptions = serde_json::from_str(
             r#"{"includeVectorPaths":false,"includeRasterAppearance":true,"embedColorProfile":false}"#,
@@ -219,6 +315,41 @@ mod tests {
         .unwrap();
         assert_eq!(o.raster_scale, 1.0);
         assert!(!o.include_vector_paths);
+        // Old JSON (no color fields) keeps the old behaviour: document space, 8 bit.
+        assert_eq!((o.profile, o.bit_depth), (ExportProfile::Document, 8));
+        let o: ExportOptions = serde_json::from_str(
+            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"display_p3","bitDepth":16}"#,
+        )
+        .unwrap();
+        assert_eq!((o.profile, o.bit_depth), (ExportProfile::DisplayP3, 16));
+        assert!(o.validate(ExportFormat::Png).is_ok());
+        assert!(serde_json::from_str::<ExportOptions>(
+            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"cmyk"}"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn color_options_are_validated() {
+        for depth in [0u8, 1, 12, 32, 255] {
+            let o = ExportOptions { bit_depth: depth, ..Default::default() };
+            assert_eq!(o.validate(ExportFormat::Png).unwrap_err().code, ErrorCode::InvalidArgument);
+        }
+        for p in [ExportProfile::DisplayP3, ExportProfile::AdobeRgb] {
+            let o = ExportOptions { profile: p, embed_color_profile: false, ..Default::default() };
+            for f in [ExportFormat::Png, ExportFormat::Psd, ExportFormat::Svg, ExportFormat::Pdf] {
+                assert_eq!(o.validate(f).unwrap_err().code, ErrorCode::IncompatibleOutputProfile);
+            }
+            assert!(
+                ExportOptions { profile: p, bit_depth: 16, ..Default::default() }.validate(ExportFormat::Psd).is_ok()
+            );
+        }
+        for p in [ExportProfile::Document, ExportProfile::Srgb] {
+            let o = ExportOptions { profile: p, embed_color_profile: false, ..Default::default() };
+            assert!(o.validate(ExportFormat::Png).is_ok());
+        }
+        assert_eq!(ExportProfile::AdobeRgb.as_str(), "adobe_rgb");
+        assert_eq!(serde_json::to_string(&ExportProfile::DisplayP3).unwrap(), "\"display_p3\"");
     }
 
     #[test]

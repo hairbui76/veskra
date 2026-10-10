@@ -13,7 +13,10 @@
 pub mod command;
 mod session;
 
-pub use command::{Command, LayerKindSpec, PlacementSpec, SampleSpec, SelectionOp};
+pub use command::{
+    AdjustKindSpec, AnchorSpec, Command, GradientKindSpec, GradientStopSpec, LayerKindSpec, PlacementSpec, SampleSpec,
+    SelectionOp,
+};
 pub use session::{
     EResult, EngineConfig, FALLBACK_PRESSURE, InputOutcome, Receipt, Session, error_json, flags, response_json,
 };

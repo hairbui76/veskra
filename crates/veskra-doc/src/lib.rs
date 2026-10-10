@@ -17,7 +17,7 @@ mod history;
 mod layer;
 mod stroke;
 
-pub use document::{DocColor, Document, DocumentError, DocumentParts, LayerPatch, Placement};
+pub use document::{CanvasMap, DocColor, Document, DocumentError, DocumentParts, LayerPatch, Placement};
 pub use history::{History, HistoryConfig, HistoryStats};
 pub use layer::{GroupContent, Layer, LayerKind, LayerKindTag, LayerProps, PixelContent, VectorFidelity};
 pub use stroke::{StrokeComposition, StrokeGeometry, StrokeMode, StrokeRecord};

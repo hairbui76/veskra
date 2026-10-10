@@ -8,6 +8,7 @@
 //! veskra inspect-project <in.veskra>           manifest/entries/layers summary as JSON
 //! veskra inspect-export <file.(png|psd|svg|pdf)>  structural validation of an export
 //! veskra export <in.veskra> <out.ext> [--no-vector] [--no-raster] [--no-icc]
+//!               [--profile document|srgb|display_p3|adobe_rgb] [--depth 8|16]
 //! veskra benchmark-stroke [--size N] [--samples N] [--brush ID] [--input] [--predict]
 //! veskra compare-color <a.png> <b.png>         per-channel diff + CIEDE2000 stats (sRGB, opaque)
 //! ```
@@ -149,12 +150,19 @@ fn run(args: &[String]) -> R<Value> {
         "export" => {
             let (inp, outp) = (rest.first().ok_or("export <in> <out>")?, rest.get(1).ok_or("missing out")?);
             let format = format_for(Path::new(outp))?;
-            let options = ExportOptions {
+            let mut options = ExportOptions {
                 include_vector_paths: !flag(rest, "--no-vector"),
                 include_raster_appearance: !flag(rest, "--no-raster"),
                 embed_color_profile: !flag(rest, "--no-icc"),
-                raster_scale: 1.0,
+                ..Default::default()
             };
+            if let Some(p) = opt(rest, "--profile") {
+                options.profile = serde_json::from_value(json!(p))
+                    .map_err(|_| format!("unknown --profile {p} (document|srgb|display_p3|adobe_rgb)"))?;
+            }
+            if let Some(d) = opt(rest, "--depth") {
+                options.bit_depth = d.parse().map_err(|_| format!("bad --depth {d} (8|16)"))?;
+            }
             let mut s = session(None);
             exec(&mut s, Command::DocumentOpen { path: inp.clone() })?;
             let pre = exec(&mut s, Command::ExportPreflight { format, options })?;

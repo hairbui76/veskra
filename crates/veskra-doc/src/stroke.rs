@@ -135,6 +135,38 @@ impl StrokeRecord {
         StrokeRecord { id, layer, ..self.clone() }
     }
 
+    /// Copy of this record with every coordinate mapped through `m` (canvas crop / resize):
+    /// sample positions, centerline, outline and bounds. Pressure, timing, brush parameters and
+    /// composition flags are unchanged. `fit_error` is scaled by the larger axis scale.
+    pub fn transformed(&self, m: &veskra_core::Affine) -> Result<StrokeRecord, VeskraError> {
+        if !m.is_finite() {
+            return Err(VeskraError::invalid("stroke transform is not finite"));
+        }
+        let samples: Vec<StrokeSample> = self
+            .samples
+            .iter()
+            .map(|s| {
+                let p = m.apply(veskra_core::PointF::new(s.x as f64, s.y as f64));
+                StrokeSample { x: p.x as f32, y: p.y as f32, ..*s }
+            })
+            .collect();
+        Self::check_samples(&samples)?;
+        let scale = (m.a * m.a + m.b * m.b).sqrt().max((m.c * m.c + m.d * m.d).sqrt());
+        let geometry = self.geometry.as_ref().map(|g| StrokeGeometry {
+            centerline: g.centerline.transform(m),
+            outline: g.outline.transform(m),
+            fit_error: g.fit_error * scale,
+        });
+        let b = veskra_core::RectF::new(
+            self.bounds.x0 as f64,
+            self.bounds.y0 as f64,
+            self.bounds.x1 as f64,
+            self.bounds.y1 as f64,
+        );
+        let bounds = if self.bounds.is_empty() { self.bounds } else { RectI::covering(&m.transform_rect_bounds(&b)) };
+        Ok(StrokeRecord { samples: samples.into(), geometry, bounds, ..self.clone() })
+    }
+
     /// Can this stroke be emitted as an editable vector path faithfully?
     pub fn has_vector_form(&self) -> bool {
         self.vector_eligible

@@ -124,6 +124,10 @@ pub struct InputConfig {
     pub tap_max_duration_ns: u64,
     pub tap_max_move_px: f32,
     pub gesture: GestureConfig,
+    /// Camera lock: finger gestures never change the view (no `ViewChanged`/`GestureEnd` is
+    /// emitted). Drawing, taps, hover and stylus buttons are unaffected; a finger that would have
+    /// navigated is still consumed as a (no-op) gesture, so it never draws by accident.
+    pub lock_view: bool,
 }
 
 impl Default for InputConfig {
@@ -140,6 +144,7 @@ impl Default for InputConfig {
             tap_max_duration_ns: 250_000_000,
             tap_max_move_px: 10.0,
             gesture: GestureConfig::default(),
+            lock_view: false,
         }
     }
 }
@@ -917,6 +922,7 @@ impl InputArbiter {
     fn gesture_update(&mut self, view: &mut ViewTransform, out: &mut Vec<InputAction>) {
         let slop = f64::from(self.cfg.touch_slop_px);
         let gcfg = self.cfg.gesture;
+        let lock_view = self.cfg.lock_view;
         let Mode::Gesture(g) = &mut self.mode else { return };
         if !g.transformed {
             let moved = g.ids.iter().any(|id| self.pointers.iter().any(|p| p.id == *id && p.max_dist > slop));
@@ -927,6 +933,11 @@ impl InputArbiter {
             if let Some(s) = &mut self.session {
                 s.disqualified = true;
             }
+        }
+        if lock_view {
+            // Camera lock: the gesture is tracked (so it still disqualifies taps once it moved)
+            // but never changes the view.
+            return;
         }
         let Some((solver, ia, ib)) = g.solver else { return };
         let pos = |id: i32| self.pointers.iter().find(|p| p.id == id).map(|p| p.last);

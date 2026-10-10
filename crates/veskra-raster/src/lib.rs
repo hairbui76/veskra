@@ -16,10 +16,15 @@ mod error;
 mod mask;
 mod tile;
 
+pub mod adjust;
 pub mod fill;
+pub mod gradient;
 pub mod ops;
+pub mod outline;
+pub mod resample;
 pub mod select;
 pub mod transform;
+pub mod warp;
 
 pub use error::RasterError;
 pub use mask::{MASK_OP_LIMIT, MaskGrid, MaskOp, MaskTile};

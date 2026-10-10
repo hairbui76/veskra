@@ -497,6 +497,13 @@ impl IccProfile {
         P.get_or_init(|| Arc::new(writer::build_profile(&RgbProfileSpec::display_p3()))).clone()
     }
 
+    /// Veskra-generated ICC v4.3 matrix/TRC profile with the colorimetry of Adobe RGB (1998)
+    /// (see [`RgbProfileSpec::adobe_rgb_compatible`]); export target only.
+    pub fn adobe_rgb_compatible() -> Arc<IccProfile> {
+        static P: OnceLock<Arc<IccProfile>> = OnceLock::new();
+        P.get_or_init(|| Arc::new(writer::build_profile(&RgbProfileSpec::adobe_rgb_compatible()))).clone()
+    }
+
     /// The exact profile bytes (embed these on export).
     pub fn bytes(&self) -> &[u8] {
         &self.bytes

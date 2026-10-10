@@ -22,14 +22,17 @@
 //!   OCG per vector layer (named after the layer). `/OCProperties /D` lists `/Order`, `/ON` and
 //!   `/OFF` (hidden per strategy); content is wrapped in `/OC /ocN BDC … EMC`.
 //! * All streams Flate-compressed; deterministic (no dates, no `/ID`); classic xref table.
+//! * `profile = display_p3 | adobe_rgb`: the single `/ICCBased` color space holds that profile and
+//!   **both** image samples and vector fill colors are converted to it (relative colorimetric), so
+//!   the whole page is color-managed in the target space. `bit_depth = 16` is not available:
+//!   images are 8-bit (`BitDepthReduced` warning).
 
 mod validate;
 
-use crate::plan::{HybridStrategy, IllustratorPlan, SrgbOut, VecNode, VisibleItem, render_run, stroke_alpha};
+use crate::plan::{ColorOut, HybridStrategy, IllustratorPlan, VecNode, VisibleItem, render_run, stroke_alpha};
 use crate::{CancelToken, Exporter};
 use std::collections::BTreeMap;
 use std::io::Write;
-use veskra_color::IccProfile;
 use veskra_core::export::{ExportFormat, ExportOptions, ExportPreflight, ExportReport, ValidationStatus};
 use veskra_core::{BlendMode, ErrorCode, LayerId, RectF, VeskraError};
 use veskra_doc::Document;
@@ -139,7 +142,7 @@ impl Objects {
 struct PdfWriter<'a> {
     doc: &'a Document,
     plan: &'a IllustratorPlan,
-    color: SrgbOut,
+    color: ColorOut,
     objs: Objects,
     /// Color space object (`[/ICCBased n 0 R]`) when embedding.
     cs: Option<u32>,
@@ -194,7 +197,7 @@ impl PdfWriter<'_> {
             let b = g.outline.bounds();
             bounds = if first { b } else { bounds.union(&b) };
             first = false;
-            let [r, gg, bb] = self.color.color(rec.color);
+            let [r, gg, bb] = self.color.target_color(rec.color);
             let alpha = stroke_alpha(rec);
             s.push_str("q\n");
             if alpha < 1.0 {
@@ -301,16 +304,16 @@ impl PdfWriter<'_> {
     }
 }
 
-/// Serialize the plan as PDF. Returns (bytes, paths written, images written).
+/// Serialize the plan as PDF. Returns (bytes, paths written, images written, color conversion state).
 pub(crate) fn write_pdf(
     doc: &Document,
     plan: &IllustratorPlan,
     cancel: &CancelToken,
-) -> Result<(Vec<u8>, u32, u32), VeskraError> {
+) -> Result<(Vec<u8>, u32, u32, ColorOut), VeskraError> {
     let mut w = PdfWriter {
         doc,
         plan,
-        color: SrgbOut::new(doc, plan),
+        color: ColorOut::new(doc, plan),
         objs: Objects::default(),
         cs: None,
         gstates: BTreeMap::new(),
@@ -329,8 +332,8 @@ pub(crate) fn write_pdf(
     let page_resources = w.objs.alloc();
     w.form_resources = w.objs.alloc();
     if plan.options.embed_color_profile {
-        let srgb = IccProfile::srgb();
-        let icc = w.objs.add(stream_obj("/N 3 /Alternate /DeviceRGB", srgb.bytes()));
+        let target = w.color.target.clone();
+        let icc = w.objs.add(stream_obj("/N 3 /Alternate /DeviceRGB", target.bytes()));
         w.cs = Some(w.objs.add(format!("[/ICCBased {icc} 0 R]").into_bytes()));
     }
 
@@ -473,7 +476,7 @@ pub(crate) fn write_pdf(
     };
     w.objs.set(catalog, format!("<< /Type /Catalog /Pages {pages} 0 R{ocprops} >>").into_bytes());
     let (paths, images) = (w.paths, w.images);
-    Ok((w.objs.finish(catalog, info)?, paths, images))
+    Ok((w.objs.finish(catalog, info)?, paths, images, w.color))
 }
 
 impl Exporter for PdfExporter {
@@ -497,7 +500,10 @@ impl Exporter for PdfExporter {
         if let Some(reason) = &plan.blocked_reason {
             return Err(VeskraError::new(ErrorCode::InvalidArgument, reason.clone()));
         }
-        let (bytes, paths, images) = write_pdf(doc, &plan, cancel)?;
+        let (bytes, paths, images, color) = write_pdf(doc, &plan, cancel)?;
+        let mut warnings = plan.warnings.clone();
+        warnings.extend(plan.color_warnings(doc, ExportFormat::Pdf));
+        warnings.extend(color.clip_warnings());
         cancel.check()?;
         out.write_all(&bytes)
             .and_then(|_| out.flush())
@@ -511,7 +517,11 @@ impl Exporter for PdfExporter {
             vector_object_count: paths,
             rasterized_object_count: images,
             flattened_feature_list: plan.flattened_features(),
-            warnings: plan.warnings.clone(),
+            warnings,
+            target_profile: color.target.id().semantic_name,
+            bit_depth: 8,
+            rendering_intent: color.intent(ExportFormat::Pdf),
+            out_of_gamut_pixels: color.clipped_pixels(),
             duration_ms: start.elapsed().as_millis() as u64,
             file_bytes: bytes.len() as u64,
             width_px: doc.width(),
