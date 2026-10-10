@@ -1,5 +1,8 @@
 //! The document tree and its validated mutation API.
 
+mod canvas;
+pub use canvas::CanvasMap;
+
 use crate::layer::{GroupContent, Layer, LayerKind, LayerProps, PixelContent, VectorFidelity};
 use crate::stroke::StrokeRecord;
 use std::collections::{BTreeMap, BTreeSet};
