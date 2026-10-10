@@ -51,6 +51,20 @@ impl RgbProfileSpec {
         }
     }
 
+    /// A wide-gamut RGB space **compatible with Adobe RGB (1998)**: the published colorimetry of
+    /// that encoding (primaries R (0.64, 0.33), G (0.21, 0.71), B (0.15, 0.06), D65 white, pure
+    /// gamma 563/256 = 2.19921875). The profile is generated here from those numbers; it is not
+    /// Adobe's profile file and does not use its name as its own.
+    pub fn adobe_rgb_compatible() -> Self {
+        Self {
+            description: "Veskra RGB (compatible with Adobe RGB 1998)",
+            copyright: "No copyright, use freely",
+            primaries: [[0.64, 0.33], [0.21, 0.71], [0.15, 0.06]],
+            white: D65_XY,
+            trc: ParametricCurve::new(0, &[563.0 / 256.0]).unwrap_or(ParametricCurve::SRGB),
+        }
+    }
+
     /// Unquantized Bradford D50-adapted linear RGB → PCS XYZ matrix.
     pub fn d50_matrix(&self) -> Option<Mat3> {
         let native = math::rgb_to_xyz_matrix(self.primaries, self.white)?;
