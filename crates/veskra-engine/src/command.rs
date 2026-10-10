@@ -10,6 +10,8 @@
 //! unit variants, e.g. `document.info`) ignore extra keys — they have no argument to misspell —
 //! and `ExportOptions` (veskra-core) still ignores unknown fields.
 
+use crate::guide::GuideKind;
+use crate::symmetry::SymmetryMode;
 use serde::{Deserialize, Serialize};
 use veskra_core::export::{ExportFormat, ExportOptions};
 
@@ -50,6 +52,28 @@ pub enum SelectionOp {
     Add,
     Subtract,
     Intersect,
+}
+
+/// Stroke tool (`tool.set`, `stroke.begin`). `brush` paints with the current preset (an eraser
+/// preset erases), `eraser` erases with it (hard eraser for paint presets), `smudge` drags the
+/// layer's own pixels (raster layers only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolKind {
+    #[default]
+    Brush,
+    Eraser,
+    Smudge,
+}
+
+impl ToolKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ToolKind::Brush => "brush",
+            ToolKind::Eraser => "eraser",
+            ToolKind::Smudge => "smudge",
+        }
+    }
 }
 
 /// One input sample for headless `stroke.samples` (document coordinates).
@@ -208,6 +232,10 @@ pub enum Command {
     StrokeBegin {
         #[serde(default)]
         eraser: bool,
+        /// Tool for this stroke only; omitted = the session tool (`tool.set`). `eraser: true`
+        /// (and the stylus eraser end / button) still forces erasing.
+        #[serde(default)]
+        tool: Option<ToolKind>,
     },
     #[serde(rename = "stroke.samples")]
     StrokeSamples { samples: Vec<SampleSpec> },
@@ -321,6 +349,88 @@ pub enum Command {
         #[serde(default)]
         options: ExportOptions,
     },
+
+    // ===== BEGIN stroke-time tools: symmetry / guides / tool / shapes (docs/COMMANDS.md) =====
+    /// Symmetry for every following stroke (session state, not saved in the document).
+    #[serde(rename = "symmetry.set")]
+    SymmetrySet {
+        mode: SymmetryMode,
+        /// Radial sector count, 2..=16 (default 6).
+        #[serde(default)]
+        count: Option<u32>,
+        /// Radial only: also mirror every sector (default false).
+        #[serde(default)]
+        mirror: Option<bool>,
+        /// Axis / rotation center; both or neither (default: canvas center).
+        #[serde(default)]
+        cx: Option<f64>,
+        #[serde(default)]
+        cy: Option<f64>,
+    },
+    #[serde(rename = "symmetry.get")]
+    SymmetryGet,
+    /// Ruler for every following stroke (session state). `line`: `x0,y0,x1,y1` **or** `angle`
+    /// (radians, through the stroke's first sample); `ellipse`: bounding box `x0,y0,x1,y1`.
+    #[serde(rename = "guide.set")]
+    GuideSet {
+        kind: GuideKind,
+        #[serde(default)]
+        x0: Option<f64>,
+        #[serde(default)]
+        y0: Option<f64>,
+        #[serde(default)]
+        x1: Option<f64>,
+        #[serde(default)]
+        y1: Option<f64>,
+        #[serde(default)]
+        angle: Option<f64>,
+    },
+    #[serde(rename = "guide.get")]
+    GuideGet,
+    /// Tool used by strokes on both input paths (session state) and the smudge strength.
+    #[serde(rename = "tool.set")]
+    ToolSet {
+        #[serde(default)]
+        tool: Option<ToolKind>,
+        /// Smudge strength 0..=1 (default 0.5).
+        #[serde(default)]
+        strength: Option<f32>,
+    },
+    #[serde(rename = "tool.get")]
+    ToolGet,
+    #[serde(rename = "shape.line")]
+    ShapeLine { x0: f64, y0: f64, x1: f64, y1: f64 },
+    #[serde(rename = "shape.rect")]
+    ShapeRect {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        #[serde(default)]
+        fill: bool,
+    },
+    #[serde(rename = "shape.ellipse")]
+    ShapeEllipse {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        #[serde(default)]
+        fill: bool,
+    },
+    #[serde(rename = "shape.path")]
+    ShapePath {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        closed: bool,
+        /// Fit a smooth curve through the points (Catmull-Rom).
+        #[serde(default)]
+        smooth: bool,
+        /// Closed paths only.
+        #[serde(default)]
+        fill: bool,
+    },
+    // ===== END stroke-time tools =====
 }
 
 fn default_dpi() -> f32 {
@@ -366,6 +476,10 @@ impl Command {
             Command::EditFill { .. } | Command::EditFillSelection => "Fill",
             Command::EditDeleteSelection => "Delete",
             Command::EditTransform { .. } => "Transform",
+            Command::ShapeLine { .. }
+            | Command::ShapeRect { .. }
+            | Command::ShapeEllipse { .. }
+            | Command::ShapePath { .. } => "Shape",
             _ => "",
         }
     }

@@ -6,19 +6,24 @@
 //! (see [`crate::export_snapshot`]).
 
 use crate::command::{Command, LayerKindSpec, PlacementSpec, SampleSpec, SelectionOp};
+use crate::dirty::DirtySet;
+use crate::guide::ActiveGuide;
+use crate::symmetry::Replica;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use veskra_brush::{BrushPreset, StrokeContext, StrokeMode as BrushMode, StrokeRenderer};
+use veskra_brush::BrushPreset;
 use veskra_core::export::{ExportFormat, ExportOptions};
 use veskra_core::{
-    BlendMode, BlendSpace, ColorRgba, DocumentId, ErrorCode, LayerId, PointF, RectF, RectI, SampleFlags, StrokeId,
-    StrokeSample, VeskraError,
+    BlendMode, BlendSpace, ColorRgba, DocumentId, ErrorCode, LayerId, PointF, RectF, RectI, SampleFlags, StrokeSample,
+    VeskraError,
 };
 use veskra_doc::{
     DocColor, Document, GroupContent, History, HistoryConfig, LayerKind, LayerPatch, LayerProps, PixelContent,
-    Placement, StrokeComposition, StrokeGeometry, StrokeMode, StrokeRecord, VectorFidelity,
+    Placement, StrokeMode, VectorFidelity,
 };
+
+mod tools;
 use veskra_input::{InputAction, InputArbiter, InputConfig, RawPointerEvent, ViewTransform};
 use veskra_raster::{MaskGrid, MaskOp, TileGrid};
 
@@ -93,15 +98,19 @@ impl IdSource {
 
 struct LiveStroke {
     layer: LayerId,
-    renderer: StrokeRenderer,
-    /// Base ⊕ confirmed stroke, shown instead of the layer's tiles while the stroke is live.
+    /// What draws: one brush renderer per stroke of the gesture (the user's stroke plus its
+    /// symmetry replicas), or the smudge engine. See `session/tools.rs`.
+    ink: tools::LiveInk,
+    /// The layer when the gesture began (after a filled shape's fill, if any).
+    base: TileGrid,
+    /// Base ⊕ confirmed stroke(s), shown instead of the layer's tiles while the stroke is live.
     live_tiles: TileGrid,
     /// Live tiles plus predicted dabs (display only, STY-007).
     predicted_tiles: Option<TileGrid>,
-    predicted_rect: RectI,
-    // The confirmed samples are owned by `renderer` (`confirmed_samples()`): only samples the
+    predicted_rect: DirtySet,
+    // The confirmed samples are owned by the renderers (`confirmed_samples()`): only samples a
     // renderer accepted (validated, monotonic time, in range) are rendered *and* recorded, so the
-    // committed `StrokeRecord` always reproduces the pixels.
+    // committed `StrokeRecord`s always reproduce the pixels.
     preset: BrushPreset,
     color: ColorRgba,
     seed: u64,
@@ -109,7 +118,18 @@ struct LiveStroke {
     alpha_locked: bool,
     selection_clipped: bool,
     opacity: f32,
-    bounds: RectI,
+    bounds: DirtySet,
+    /// Symmetry transforms of the replicas (`ink` brush part `i + 1` / smudge head `i + 1`).
+    replicas: Vec<Replica>,
+    /// Ruler bound to this stroke; applied to samples before symmetry.
+    guide: Option<ActiveGuide>,
+    /// History label of the committed gesture.
+    label: &'static str,
+    /// Raster edit to record on the layer at commit (`fill` for filled shapes, `smudge`).
+    raster_edit: Option<&'static str>,
+    /// Path length fed so far and its last point (work budget of multi-stroke gestures).
+    path_px: f64,
+    last_pt: Option<PointF>,
 }
 
 pub struct Session {
@@ -131,6 +151,8 @@ pub struct Session {
     eraser_toggle: bool,
     hover: Option<PointF>,
     doc_path: Option<PathBuf>,
+    /// Stroke-time tool state: symmetry, guide, tool, smudge strength (not saved in documents).
+    tools: tools::ToolState,
 }
 
 impl std::fmt::Debug for Session {
@@ -177,6 +199,7 @@ impl Session {
             eraser_toggle: false,
             hover: None,
             doc_path: None,
+            tools: tools::ToolState::default(),
         }
     }
 
@@ -524,17 +547,15 @@ impl Session {
                 }
                 Ok(self.receipt(json!({"picked": c.to_hex(), "color": self.color.to_hex()})))
             }
-            Command::StrokeBegin { eraser } => {
-                self.begin_stroke(eraser)?;
+            Command::StrokeBegin { eraser, tool } => {
+                self.begin_stroke_with(tools::BeginOpts { eraser, tool, shape: None })?;
                 Ok(self.receipt(json!({})))
             }
             Command::StrokeSamples { samples } => {
                 let samples: Vec<StrokeSample> = samples.iter().map(sample_from_spec).collect::<EResult<_>>()?;
                 let dirty = self.add_samples(&samples)?;
                 let mut r = self.receipt(json!({}));
-                if !dirty.is_empty() {
-                    r.invalidated.push(dirty);
-                }
+                r.invalidated = dirty.into_rects();
                 Ok(r)
             }
             Command::StrokeCommit => {
@@ -544,9 +565,7 @@ impl Session {
                 let committed = v.get("committed").and_then(Value::as_bool) == Some(true);
                 let mut r = self.receipt(v);
                 r.history_changed = committed;
-                if !dirty.is_empty() {
-                    r.invalidated.push(dirty);
-                }
+                r.invalidated = dirty.into_rects();
                 if let Some(t) = r.result.get("historyTrimmed").and_then(Value::as_u64).filter(|t| *t > 0) {
                     r.warnings.push(format!(
                         "Undo history was trimmed by {t} oldest step(s) to stay within the memory budget."
@@ -557,9 +576,7 @@ impl Session {
             Command::StrokeCancel => {
                 let dirty = self.cancel_stroke();
                 let mut r = self.receipt(json!({}));
-                if !dirty.is_empty() {
-                    r.invalidated.push(dirty);
-                }
+                r.invalidated = dirty.into_rects();
                 Ok(r)
             }
             Command::HistoryUndo => self.undo(),
@@ -752,6 +769,21 @@ impl Session {
                     crate::export_snapshot(&snap, format, &options, Path::new(&path), &veskra_io::CancelToken::new())?;
                 Ok(self.receipt(serde_json::to_value(report).map_err(internal)?))
             }
+            // ===== stroke-time tools, to the end of this match (implemented in `session/tools.rs`) =====
+            Command::SymmetrySet { mode, count, mirror, cx, cy } => self.symmetry_set(mode, count, mirror, cx, cy),
+            Command::SymmetryGet => Ok(self.receipt(self.symmetry_json())),
+            Command::GuideSet { kind, x0, y0, x1, y1, angle } => self.guide_set(kind, x0, y0, x1, y1, angle),
+            Command::GuideGet => Ok(self.receipt(self.tools.guide.to_json())),
+            Command::ToolSet { tool, strength } => self.tool_set(tool, strength),
+            Command::ToolGet => Ok(self.receipt(self.tool_json())),
+            Command::ShapeLine { x0, y0, x1, y1 } => self.shape_draw(crate::shape::line(x0, y0, x1, y1)?, false),
+            Command::ShapeRect { x0, y0, x1, y1, fill } => self.shape_draw(crate::shape::rect(x0, y0, x1, y1)?, fill),
+            Command::ShapeEllipse { x0, y0, x1, y1, fill } => {
+                self.shape_draw(crate::shape::ellipse(x0, y0, x1, y1)?, fill)
+            }
+            Command::ShapePath { points, closed, smooth, fill } => {
+                self.shape_draw(crate::shape::path(&points, closed, smooth)?, fill)
+            }
         }
     }
 
@@ -879,6 +911,7 @@ impl Session {
             "canUndo": self.history.can_undo(), "canRedo": self.history.can_redo(),
             "undoLabel": self.history.undo_label(), "redoLabel": self.history.redo_label(),
             "historyBytes": st.bytes, "historyTrimmed": st.trimmed_entries,
+            "symmetry": self.symmetry_json(), "guide": self.tools.guide.to_json(), "tool": self.tool_json(),
         }))
     }
 
@@ -1122,177 +1155,50 @@ impl Session {
 
     // ------------------------------------------------------------------ strokes
 
+    // The stroke pipeline (begin → samples/prediction → commit) lives in `session/tools.rs`, where
+    // symmetry, guides, smudge and shapes plug into it. These wrappers are the entry points of
+    // both the headless commands and the packed input path.
+
     fn begin_stroke(&mut self, eraser_requested: bool) -> EResult<()> {
-        if self.live.is_some() {
-            return Err(VeskraError::new(ErrorCode::InvalidState, "a stroke is already in progress"));
-        }
-        let d = self.doc()?.clone();
-        let layer_id = d.active_layer.ok_or_else(|| VeskraError::new(ErrorCode::InvalidState, "no active layer"))?;
-        let layer = d.layer(layer_id).ok_or_else(|| VeskraError::new(ErrorCode::NotFound, "active layer missing"))?;
-        if d.is_effectively_locked(layer_id) {
-            return Err(VeskraError::new(ErrorCode::LayerLocked, "the active layer is locked"));
-        }
-        let px = layer
-            .pixels()
-            .ok_or_else(|| VeskraError::new(ErrorCode::UnsupportedLayerFeature, "cannot paint on a group"))?;
-        let eraser = eraser_requested || self.eraser_toggle || self.brush.eraser;
-        let preset = if eraser && !self.brush.eraser {
-            self.presets.iter().find(|p| p.id == "eraser.hard").cloned().unwrap_or_else(|| self.brush.clone())
-        } else {
-            self.brush.clone()
-        };
-        let is_vector_layer = matches!(layer.kind, LayerKind::Vector(_));
-        if is_vector_layer && (eraser || !preset.vector_eligible) {
-            return Err(VeskraError::new(
-                ErrorCode::UnsupportedLayerFeature,
-                "vector layers accept only vector-eligible brushes (use a raster layer for texture or pixel erasing)",
-            ));
-        }
-        let mode = if eraser { StrokeMode::Erase } else { StrokeMode::Paint };
-        let alpha_locked = layer.props.alpha_locked;
-        let selection = d.selection.clone();
-        let selection_clipped = selection.is_some();
-        // `Document::add_stroke` only accepts vector-representable strokes on vector layers; refuse
-        // here, before anything is drawn, instead of discarding the finished stroke at commit.
-        if is_vector_layer && (alpha_locked || selection_clipped) {
-            return Err(VeskraError::new(
-                ErrorCode::UnsupportedLayerFeature,
-                "vector layers cannot be painted with alpha lock or through a selection (clear the selection or use a raster layer)",
-            ));
-        }
-        let seed = (self.next_id() & u64::MAX as u128) as u64;
-        let ctx = StrokeContext {
-            mode: if eraser { BrushMode::Erase } else { BrushMode::Paint },
-            alpha_lock: alpha_locked,
-            selection,
-            clip: d.bounds(),
-            ..Default::default()
-        };
-        let base = px.tiles.clone();
-        let renderer = StrokeRenderer::begin(preset.clone(), self.color, seed, base.clone(), ctx);
-        self.live = Some(LiveStroke {
-            layer: layer_id,
-            renderer,
-            live_tiles: base,
-            predicted_tiles: None,
-            predicted_rect: RectI::EMPTY,
-            opacity: preset.opacity,
-            preset,
-            color: self.color,
-            seed,
-            mode,
-            alpha_locked,
-            selection_clipped,
-            bounds: RectI::EMPTY,
-        });
-        Ok(())
+        self.begin_stroke_with(tools::BeginOpts { eraser: eraser_requested, tool: None, shape: None })
     }
 
-    fn add_samples(&mut self, samples: &[StrokeSample]) -> EResult<RectI> {
-        let live =
-            self.live.as_mut().ok_or_else(|| VeskraError::new(ErrorCode::InvalidState, "no stroke in progress"))?;
-        let confirmed: Vec<StrokeSample> = samples.iter().copied().filter(|s| s.is_confirmed()).collect();
-        for s in &confirmed {
-            s.validate()?;
-        }
-        if live.renderer.confirmed_samples().len() + confirmed.len() > veskra_core::limits::MAX_STROKE_SAMPLES {
-            return Err(VeskraError::alloc("stroke exceeds the sample limit"));
-        }
-        // The renderer skips (and counts) samples it cannot use, e.g. timestamps going backwards
-        // or coordinates beyond its range; only accepted samples end up in the record.
-        let mut dirty = live.renderer.add_samples(&confirmed);
-        if !dirty.is_empty() {
-            live.renderer.render_into(&mut live.live_tiles, dirty);
-        }
-        live.bounds = live.bounds.union(&dirty);
-        // A new confirmed batch supersedes any prediction.
-        if live.predicted_tiles.take().is_some() {
-            dirty = dirty.union(&live.predicted_rect);
-            live.predicted_rect = RectI::EMPTY;
-        }
-        Ok(dirty)
+    fn add_samples(&mut self, samples: &[StrokeSample]) -> EResult<DirtySet> {
+        self.add_samples_impl(samples)
     }
 
-    fn predict(&mut self, predicted: &[StrokeSample]) -> RectI {
-        let Some(live) = self.live.as_mut() else { return RectI::EMPTY };
-        let old = live.predicted_rect;
-        if predicted.is_empty() {
-            live.predicted_tiles = None;
-            live.predicted_rect = RectI::EMPTY;
-            return old;
-        }
-        let mut tiles = live.live_tiles.clone();
-        let r = live.renderer.prediction_preview(predicted, &mut tiles);
-        live.predicted_tiles = Some(tiles);
-        live.predicted_rect = r;
-        old.union(&r)
+    fn predict(&mut self, predicted: &[StrokeSample]) -> DirtySet {
+        self.predict_impl(predicted)
     }
 
     /// End the live stroke and commit it as exactly one undo step (`{"committed": false}` and no
-    /// history entry when no sample was accepted). The returned rect must be refreshed whether or
+    /// history entry when no sample was accepted). The returned rects must be refreshed whether or
     /// not the commit succeeded: the live preview is gone either way. A failed commit changes
     /// neither document, version, history nor the ID stream. Failure is not expected in practice:
     /// samples are pre-filtered by the renderer, vector-layer policy is enforced at begin, and
     /// every document mutation is refused while a stroke is live.
-    fn commit_stroke(&mut self) -> (EResult<Value>, RectI) {
+    fn commit_stroke(&mut self) -> (EResult<Value>, DirtySet) {
         let Some(live) = self.live.take() else {
-            return (Err(VeskraError::new(ErrorCode::InvalidState, "no stroke in progress")), RectI::EMPTY);
+            return (Err(VeskraError::new(ErrorCode::InvalidState, "no stroke in progress")), DirtySet::default());
         };
-        let mut dirty = live.bounds.union(&live.predicted_rect);
+        let mut dirty = live.bounds.clone();
+        dirty.extend(&live.predicted_rect);
         let ids = self.ids.clone();
-        let r = self.commit_live(live, &mut dirty);
+        let r = self.commit_live_impl(live, &mut dirty);
         if r.is_err() {
             self.ids = ids;
         }
         (r, dirty)
     }
 
-    fn commit_live(&mut self, live: LiveStroke, dirty: &mut RectI) -> EResult<Value> {
-        let LiveStroke { layer, renderer, preset, color, seed, mode, alpha_locked, selection_clipped, opacity, .. } =
-            live;
-        // `finish` flushes the stabilizer and the final dab; its tiles (base ⊕ full stroke) are
-        // authoritative, not the live preview tiles.
-        let finished = renderer.finish();
-        *dirty = dirty.union(&finished.bounds);
-        if finished.confirmed_samples.is_empty() {
-            return Ok(json!({"committed": false}));
-        }
-        let before = self.doc()?.clone();
-        let mut next = (*before).clone();
-        let profile = next.color.profile.clone();
-        let geometry = finished.geometry.map(|g| StrokeGeometry {
-            centerline: g.centerline,
-            outline: g.outline,
-            fit_error: g.fit_error,
-        });
-        let stroke_id = StrokeId::from_u128(self.next_id());
-        let rec = StrokeRecord::new(
-            stroke_id,
-            layer,
-            finished.confirmed_samples,
-            preset.id.clone(),
-            preset.version,
-            serde_json::to_string(&preset).map_err(internal)?,
-            color,
-            seed,
-            profile,
-            StrokeComposition { mode, opacity, alpha_locked, selection_clipped },
-            preset.vector_eligible && mode == StrokeMode::Paint,
-            geometry,
-            finished.bounds,
-        )?;
-        next.pixels_mut_editable(layer)?.tiles = finished.tiles;
-        next.add_stroke(rec)?;
-        let trimmed = self.history.record("Stroke", before, &next);
-        self.doc = Some(Arc::new(next));
-        self.version += 1;
-        Ok(json!({"committed": true, "strokeId": stroke_id.to_string(), "historyTrimmed": trimmed}))
-    }
-
-    fn cancel_stroke(&mut self) -> RectI {
+    fn cancel_stroke(&mut self) -> DirtySet {
         match self.live.take() {
-            Some(l) => l.bounds.union(&l.predicted_rect),
-            None => RectI::EMPTY,
+            Some(l) => {
+                let mut d = l.bounds;
+                d.extend(&l.predicted_rect);
+                d
+            }
+            None => DirtySet::default(),
         }
     }
 
@@ -1339,7 +1245,7 @@ impl Session {
 
     fn apply_actions(&mut self, actions: Vec<InputAction>) -> InputOutcome {
         let mut out = InputOutcome::default();
-        let mut dirty = RectI::EMPTY;
+        let mut dirty = DirtySet::default();
         for a in actions {
             match a {
                 InputAction::StrokeBegin { eraser, .. } => {
@@ -1358,13 +1264,13 @@ impl Session {
                         continue;
                     }
                     match self.add_samples(&s) {
-                        Ok(r) => dirty = dirty.union(&r),
+                        Ok(r) => dirty.extend(&r),
                         Err(e) => out.warnings.push(e.message),
                     }
                 }
                 InputAction::StrokePrediction(p) => {
                     if !self.swallow_stroke {
-                        dirty = dirty.union(&self.predict(&p));
+                        dirty.extend(&self.predict(&p));
                     }
                 }
                 InputAction::StrokeCommit => {
@@ -1374,7 +1280,7 @@ impl Session {
                     }
                     let (res, r) = self.commit_stroke();
                     // Refresh even on failure: the live preview is gone.
-                    dirty = dirty.union(&r);
+                    dirty.extend(&r);
                     match res {
                         Ok(v) => {
                             if v.get("committed").and_then(|c| c.as_bool()) == Some(true) {
@@ -1390,7 +1296,7 @@ impl Session {
                     if std::mem::take(&mut self.swallow_stroke) {
                         continue;
                     }
-                    dirty = dirty.union(&self.cancel_stroke());
+                    dirty.extend(&self.cancel_stroke());
                 }
                 InputAction::Hover(p) => {
                     out.hover = p;
@@ -1404,13 +1310,13 @@ impl Session {
                 InputAction::GestureEnd => {}
                 InputAction::TwoFingerTap => {
                     if let Ok(r) = self.undo() {
-                        dirty = dirty.union(r.invalidated.first().unwrap_or(&RectI::EMPTY));
+                        dirty.add(*r.invalidated.first().unwrap_or(&RectI::EMPTY));
                         out.flags |= flags::HISTORY;
                     }
                 }
                 InputAction::ThreeFingerTap => {
                     if let Ok(r) = self.redo() {
-                        dirty = dirty.union(r.invalidated.first().unwrap_or(&RectI::EMPTY));
+                        dirty.add(*r.invalidated.first().unwrap_or(&RectI::EMPTY));
                         out.flags |= flags::HISTORY;
                     }
                 }
@@ -1418,7 +1324,7 @@ impl Session {
                     veskra_input::ButtonAction::ToggleEraser => self.eraser_toggle = pressed,
                     veskra_input::ButtonAction::Undo if pressed => {
                         if let Ok(r) = self.undo() {
-                            dirty = dirty.union(r.invalidated.first().unwrap_or(&RectI::EMPTY));
+                            dirty.add(*r.invalidated.first().unwrap_or(&RectI::EMPTY));
                             out.flags |= flags::HISTORY;
                         }
                     }
@@ -1434,12 +1340,17 @@ impl Session {
                 },
             }
         }
-        if let Some(d) = &self.doc {
-            dirty = dirty.intersect(&d.bounds());
+        // Disjoint areas (e.g. symmetry replicas) stay separate rects so the UI does not refresh
+        // their whole bounding box on every pointer packet.
+        let clip = self.doc.as_ref().map(|d| d.bounds());
+        for r in dirty.into_rects() {
+            let r = clip.map_or(r, |c| r.intersect(&c));
+            if !r.is_empty() {
+                out.dirty.push(r);
+            }
         }
-        if !dirty.is_empty() {
+        if !out.dirty.is_empty() {
             out.flags |= flags::DIRTY;
-            out.dirty.push(dirty);
         }
         out
     }
@@ -1453,7 +1364,7 @@ impl Session {
         let overrides_storage;
         let overrides: &[(LayerId, &TileGrid)] = match &self.live {
             Some(l) => {
-                overrides_storage = [(l.layer, l.predicted_tiles.as_ref().unwrap_or(&l.live_tiles))];
+                overrides_storage = [(l.layer, l.display_tiles())];
                 &overrides_storage
             }
             None => &[],

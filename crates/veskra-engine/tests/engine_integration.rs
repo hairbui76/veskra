@@ -224,7 +224,7 @@ fn predicted_samples_never_reach_document() {
     use veskra_core::{SampleFlags, StrokeSample};
     let mut s = session();
     s.execute(Command::DocumentCreate { width: 64, height: 64, dpi: 72.0, background: None }).unwrap();
-    s.execute(Command::StrokeBegin { eraser: false }).unwrap();
+    s.execute(Command::StrokeBegin { eraser: false, tool: None }).unwrap();
     s.execute(Command::StrokeSamples {
         samples: vec![SampleSpec { x: 5.0, y: 5.0, t: 0, p: Some(0.5), tilt: None, azimuth: None }],
     })

@@ -11,12 +11,18 @@
 //! document untouched.
 
 pub mod command;
+mod dirty;
+pub mod guide;
 mod session;
+pub mod shape;
+pub mod symmetry;
 
-pub use command::{Command, LayerKindSpec, PlacementSpec, SampleSpec, SelectionOp};
+pub use command::{Command, LayerKindSpec, PlacementSpec, SampleSpec, SelectionOp, ToolKind};
+pub use guide::GuideKind;
 pub use session::{
     EResult, EngineConfig, FALLBACK_PRESSURE, InputOutcome, Receipt, Session, error_json, flags, response_json,
 };
+pub use symmetry::SymmetryMode;
 
 pub use veskra_core;
 pub use veskra_doc;
