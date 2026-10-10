@@ -35,6 +35,9 @@ class CanvasDisplay {
     /** Engine-thread callbacks routed to the UI thread. */
     var historyListener: ((strokeCommitted: Boolean) -> Unit)? = null
 
+    /** UI thread: the doc→view transform changed (pan/zoom/rotate/mirror/resize); feeds tool overlays. */
+    var viewListener: ((ViewState) -> Unit)? = null
+
     class PlacedTile(val left: Float, val top: Float, val bitmap: Bitmap)
 
     fun forEachTile(block: (PlacedTile) -> Unit) = tiles.values.forEach(block)
@@ -99,6 +102,7 @@ class CanvasDisplay {
     private fun applyView(v: ViewState) {
         view = v
         matrix.setValues(v.toAndroidMatrixValues(matrixValues))
+        viewListener?.invoke(v)
         onInvalidate?.invoke()
     }
 }

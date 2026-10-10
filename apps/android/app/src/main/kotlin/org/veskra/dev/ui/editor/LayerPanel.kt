@@ -10,23 +10,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -62,18 +60,18 @@ private fun blendName(b: BlendMode): Int = when (b) {
 }
 
 /**
- * Layer sheet (DSN-03 slice): add/remove/duplicate/reorder/visibility/opacity/blend/alpha-lock/
- * clip/rename, with a clear raster vs vector-eligible label (MASTER_PLAN §2.1 item 5).
+ * Layer panel (DSN-03 slice): add/remove/duplicate/reorder/visibility/opacity/blend/alpha-lock/
+ * clip/rename/mask, with the layer kind on every row (MASTER_PLAN §2.1 item 5).
  * Thumbnails and drag-reorder are follow-ups; every action has a button (no gesture-only control).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun LayerSheet(state: UiState, vm: VeskraViewModel) {
+fun LayerPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifier) {
     var renaming by remember { mutableStateOf<LayerInfo?>(null) }
-    ModalBottomSheet(onDismissRequest = { vm.openSheet(null) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.layers_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+    FloatingPanel(modifier.widthIn(max = 380.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.layers_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = { vm.addLayer(LayerKind.RASTER) }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Icon(VeskraIcons.Add, contentDescription = null)
                     Text(stringResource(R.string.layers_add_raster), modifier = Modifier.padding(start = 8.dp))
@@ -83,7 +81,7 @@ fun LayerSheet(state: UiState, vm: VeskraViewModel) {
                     Text(stringResource(R.string.layers_add_vector), modifier = Modifier.padding(start = 8.dp))
                 }
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 520.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 460.dp)) {
                 items(state.layers, key = { it.id }) { layer ->
                     LayerRow(
                         layer = layer,
@@ -120,11 +118,15 @@ private fun LayerRow(layer: LayerInfo, active: Boolean, vm: VeskraViewModel, onR
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(layer.name, style = if (active) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
-                    val kind = when {
-                        layer.kind == LayerKind.GROUP -> stringResource(R.string.layers_kind_group)
-                        layer.vectorEligible -> stringResource(R.string.layers_kind_vector)
-                        else -> stringResource(R.string.layers_kind_raster)
-                    }
+                    // The row names the layer's own kind; what exports as editable vectors is counted
+                    // by the export sheet's preflight, where it depends on the chosen format.
+                    val kind = stringResource(
+                        when (layer.kind) {
+                            LayerKind.GROUP -> R.string.layers_kind_group
+                            LayerKind.VECTOR -> R.string.layers_kind_vector
+                            LayerKind.RASTER -> R.string.layers_kind_raster
+                        },
+                    )
                     Text("$kind · ${stringResource(blendName(layer.blend))} · ${(layer.opacity * 100).roundToInt()}%", style = MaterialTheme.typography.bodySmall)
                 }
                 RailButton(VeskraIcons.Up, stringResource(R.string.layers_move_up)) { vm.moveLayer(layer.id, up = true) }
@@ -152,6 +154,14 @@ private fun LayerRow(layer: LayerInfo, active: Boolean, vm: VeskraViewModel, onR
                     RailButton(VeskraIcons.Rename, stringResource(R.string.layers_rename), onClick = onRename)
                     RailButton(VeskraIcons.Duplicate, stringResource(R.string.layers_duplicate)) { vm.duplicateLayer(layer.id) }
                     RailButton(VeskraIcons.Delete, stringResource(R.string.layers_delete)) { vm.removeLayer(layer.id) }
+                    if (layer.kind == LayerKind.RASTER) {
+                        if (layer.hasMask) {
+                            RailButton(VeskraIcons.Check, stringResource(R.string.layers_mask_apply)) { vm.applyLayerMask(layer.id) }
+                            RailButton(VeskraIcons.Close, stringResource(R.string.layers_mask_remove)) { vm.removeLayerMask(layer.id) }
+                        } else {
+                            RailButton(VeskraIcons.Mask, stringResource(R.string.layers_mask_add)) { vm.maskLayerFromSelection(layer.id) }
+                        }
+                    }
                 }
             }
         }

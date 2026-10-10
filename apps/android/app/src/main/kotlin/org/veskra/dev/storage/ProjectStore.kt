@@ -2,6 +2,9 @@ package org.veskra.dev.storage
 
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ColorSpace
 import android.net.Uri
 import android.provider.OpenableColumns
 import org.veskra.kit.CopyFailedException
@@ -134,6 +137,39 @@ class ProjectStore(context: Context) {
         return dst
     }
 
+    /**
+     * Decodes any image Android understands (PNG, JPEG, WebP, …) and stages it as an sRGB PNG for
+     * `layer.import_image`. Wide-gamut sources are converted to sRGB by the platform decoder, and
+     * images larger than [MAX_IMPORT_EDGE] are downsampled by a power of two. Caller deletes the file.
+     */
+    fun stageImageAsPng(uri: Uri): File {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: throw IOException("provider returned no stream")
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("not a decodable image")
+        var sample = 1
+        while (bounds.outWidth / sample > MAX_IMPORT_EDGE || bounds.outHeight / sample > MAX_IMPORT_EDGE) sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
+        }
+        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: throw IOException("image could not be decoded")
+        return try {
+            stageBitmapAsPng(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** Writes [bitmap] (sRGB) as a PNG into the open-staging cache dir. Caller deletes the file. */
+    fun stageBitmapAsPng(bitmap: Bitmap): File {
+        val dst = File(openStagingDir, "import-${System.nanoTime()}.png")
+        dst.outputStream().use { out ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) throw IOException("PNG encode failed")
+        }
+        return dst
+    }
+
     fun displayName(uri: Uri): String? = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
         if (c.moveToFirst()) c.getString(0) else null
     }
@@ -145,5 +181,8 @@ class ProjectStore(context: Context) {
     companion object {
         /** Matches the engine's total bundle bound (veskra_core::limits::MAX_BUNDLE_TOTAL_BYTES). */
         const val MAX_OPEN_BYTES: Long = 4L * 1024 * 1024 * 1024
+
+        /** Longest edge accepted for an imported image before power-of-two downsampling. */
+        const val MAX_IMPORT_EDGE: Int = 8192
     }
 }

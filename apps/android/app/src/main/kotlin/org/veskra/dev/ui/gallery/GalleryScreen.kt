@@ -5,6 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,18 +64,22 @@ fun GalleryScreen(state: UiState, vm: VeskraViewModel) {
             modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.gallery_title), style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.weight(1f))
+            // FlowRow: on a narrow screen the buttons move to their own line instead of being squeezed.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.gallery_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+                )
                 OutlinedButton(onClick = { openLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Icon(VeskraIcons.Open, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.gallery_open))
+                    Text(stringResource(R.string.gallery_open), maxLines = 1, softWrap = false)
                 }
                 Button(onClick = { showNewCanvas = true }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Icon(VeskraIcons.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.gallery_new_canvas))
+                    Text(stringResource(R.string.gallery_new_canvas), maxLines = 1, softWrap = false)
                 }
             }
 

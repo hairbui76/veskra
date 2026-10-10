@@ -88,4 +88,51 @@ class CommandVocabularyIntegrationTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun `tool command builders are understood by the engine`() {
+        val h = NativeBridge.nativeCreateSession()
+        try {
+            exec(h, Commands.documentCreate(256, 192, 300, "#FFFFFF"))
+            val layer = LayerInfo.listFromJson(exec(h, Commands.layerList()) as JsonObject)!!.first { it.name == "Layer 1" }
+            exec(h, Commands.colorSet(HexColor(0xD03A2F)))
+
+            // Selection shapes and combination ops, then the read-only outline used for marching ants.
+            exec(h, Commands.selectionRect(10f, 10f, 100f, 80f))
+            exec(h, Commands.selectionEllipse(60f, 40f, 160f, 120f, SelectionOp.ADD))
+            exec(h, Commands.selectionLasso(listOf(PointF(0f, 0f), PointF(40f, 0f), PointF(0f, 40f)), SelectionOp.SUBTRACT))
+            for (op in SelectionOp.entries) exec(h, Commands.selectionRect(20f, 20f, 90f, 70f, op))
+            assertEquals(true, DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)?.hasSelection)
+            val outline = exec(h, Commands.selectionOutline()) as JsonObject
+            assertEquals(false, outline.bool("empty"))
+            assertEquals(4, outline.array("bounds")?.size)
+            assertTrue((outline.array("contours")?.size ?: 0) >= 1)
+
+            exec(h, Commands.editFillSelection())
+            assertEquals(4, (exec(h, Commands.layerBounds()) as JsonObject).array("bounds")?.size)
+            assertEquals("#D03A2F", (exec(h, Commands.colorPick(50f, 50f)) as JsonObject).string("color"))
+            exec(h, Commands.editTransform(Affine.translate(12.0, -4.0)))
+            exec(h, Commands.editDeleteSelection())
+            exec(h, Commands.selectionInvert())
+            exec(h, Commands.selectionAll())
+            exec(h, Commands.selectionClear())
+            exec(h, Commands.editFill(5f, 5f, tolerance = 0.2f, contiguous = false, sampleMerged = true))
+
+            exec(h, Commands.selectionRect(0f, 0f, 128f, 96f))
+            exec(h, Commands.layerMaskFromSelection(layer.id))
+            assertTrue(LayerInfo.listFromJson(exec(h, Commands.layerList()) as JsonObject)!!.first { it.id == layer.id }.hasMask)
+            exec(h, Commands.layerMaskApply(layer.id))
+            exec(h, Commands.layerMaskFromSelection(layer.id))
+            exec(h, Commands.layerMaskRemove(layer.id))
+            exec(h, Commands.layerClear(layer.id))
+
+            val png = File(System.getProperty("veskra.repo.root") ?: "../../..", "tests/fixtures/import/untagged_rgb8.png")
+            exec(h, Commands.layerImportImageAt(png.absolutePath, "Photo", 16, 8))
+            assertEquals("Photo", LayerInfo.listFromJson(exec(h, Commands.layerList()) as JsonObject)!!.first().name)
+            exec(h, Commands.viewSet(zoom = 2f, rotation = 0.5f, panX = 10f, panY = -20f))
+            exec(h, Commands.viewSet())
+        } finally {
+            NativeBridge.nativeDestroySession(h)
+        }
+    }
 }
