@@ -4,6 +4,14 @@
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// Release signing comes from outside the repository: environment variables (CI secrets) or the
+// user-level ~/.gradle/gradle.properties. Without them the release APK is built unsigned.
+fun signingValue(name: String): String? =
+    System.getenv(name)?.takeIf(String::isNotBlank)
+        ?: (project.findProperty(name) as String?)?.takeIf(String::isNotBlank)
+
+val releaseStoreFile = signingValue("VESKRA_RELEASE_STORE_FILE")
+
 plugins {
     id("com.android.application") // version from the root buildscript classpath (libs.versions.agp)
     alias(libs.plugins.kotlin.android)
@@ -23,18 +31,39 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "0.1.0-dev"
+        versionName = "0.1.0-alpha.1"
         ndk {
             // arm64-v8a: launch ABI (MASTER_PLAN §1.3). x86_64: emulator/dev only.
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = signingValue("VESKRA_RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("VESKRA_RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("VESKRA_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    // One APK per ABI (each carries only its own libveskra_ffi.so) plus a universal one.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // No signing config here: release signing is a REL task (G7).
         }
     }
 
