@@ -155,6 +155,21 @@ for the emulator ABI: `CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=<ndk>/toolchains
 and copy `target/x86_64-linux-android/release/libveskra_ffi.so` into `app/src/main/jniLibs/x86_64/`. Generated `.so` files are git-ignored. An APK built without
 the library starts and shows "Drawing engine unavailable" instead of crashing.
 
+## Releasing
+
+1. Set `versionName` (and raise `versionCode`) in `app/build.gradle.kts`, commit, push `main`.
+2. `git tag -a vX.Y.Z[-suffix] -m "..." && git push origin vX.Y.Z[-suffix]`.
+3. `.github/workflows/release.yml` builds and strips the engine for arm64-v8a and x86_64, assembles
+   signed per-ABI and universal APKs and attaches them, with `SHA256SUMS.txt`, to the GitHub release
+   for the tag. A tag with a `-suffix` becomes a pre-release; a tag that does not match `versionName`
+   fails the run.
+
+Signing uses the repository secrets `VESKRA_RELEASE_KEYSTORE_BASE64`, `VESKRA_RELEASE_STORE_PASSWORD`,
+`VESKRA_RELEASE_KEY_ALIAS` and `VESKRA_RELEASE_KEY_PASSWORD`. Local release builds read the same
+`VESKRA_RELEASE_*` names (store file path instead of base64) from the environment or
+`~/.gradle/gradle.properties`. The keystore is never committed; keep an offline backup, because a
+build signed with another key cannot update an installed app.
+
 ## Verification (honest status)
 
 | What | Status |
