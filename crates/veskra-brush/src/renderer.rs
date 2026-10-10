@@ -366,12 +366,43 @@ impl StrokeRenderer {
         dirty
     }
 
+    /// Branch this stroke's coverage with `predicted` samples appended (display only, STY-007).
+    /// The renderer's confirmed state is not changed. Used with [`composite_layered`] when one
+    /// gesture drives several strokes (symmetry), where a single in-place preview is not enough.
+    pub fn predicted_coverage(&self, predicted: &[StrokeSample]) -> PredictedCoverage {
+        let mut pipe = self.pipe.clone();
+        let mut dirty = RectI::EMPTY;
+        if !self.flushed {
+            for s in predicted {
+                if s.validate().is_err() || s.x.abs() > MAX_SAMPLE_COORD || s.y.abs() > MAX_SAMPLE_COORD {
+                    continue;
+                }
+                let p = PathPt { x: s.x as f64, y: s.y as f64, pressure: s.pressure, tilt: s.tilt };
+                dirty = dirty.union(&pipe.feed(&self.preset, &self.shape, p, None));
+            }
+        }
+        PredictedCoverage { cov: pipe.cov, dirty }
+    }
+
     /// Finish the stroke (flushes first). Geometry is computed only for vector-eligible presets
     /// in paint mode.
-    pub fn finish(mut self) -> FinishedStroke {
+    pub fn finish(self) -> FinishedStroke {
+        self.finish_inner(true)
+    }
+
+    /// [`StrokeRenderer::finish`] for a stroke whose pixels the caller composites itself with
+    /// [`composite_layered`]: samples, bounds, geometry and stats are identical, but
+    /// [`FinishedStroke::tiles`] is just the untouched base (the per-stroke composite is skipped).
+    pub fn finish_layered(self) -> FinishedStroke {
+        self.finish_inner(false)
+    }
+
+    fn finish_inner(mut self, composite: bool) -> FinishedStroke {
         self.flush();
         let mut tiles = self.base.clone();
-        self.composite(&self.pipe.cov, &mut tiles, self.bounds);
+        if composite {
+            self.composite(&self.pipe.cov, &mut tiles, self.bounds);
+        }
         // Vector geometry cost grows with path length. A stroke whose paint path leaves the
         // canvas by more than one canvas size is mostly invisible; it keeps its exact raster
         // pixels but gets no vector form (reported as raster-only on export, never silently
@@ -500,6 +531,105 @@ impl StrokeRenderer {
             if base_t.is_none() && tt.is_transparent() {
                 target.remove_tile(c);
             }
+        }
+    }
+}
+
+/// Confirmed + predicted coverage of one stroke (see [`StrokeRenderer::predicted_coverage`]).
+#[derive(Debug, Clone)]
+pub struct PredictedCoverage {
+    cov: CoverageGrid,
+    dirty: RectI,
+}
+
+impl PredictedCoverage {
+    /// Pixels whose coverage the predicted dabs may have changed.
+    pub fn dirty(&self) -> RectI {
+        self.dirty
+    }
+}
+
+/// One stroke of a multi-stroke gesture for [`composite_layered`].
+#[derive(Debug, Clone, Copy)]
+pub struct LayeredPart<'a> {
+    pub stroke: &'a StrokeRenderer,
+    /// Use this prediction branch instead of the stroke's confirmed coverage.
+    pub predicted: Option<&'a PredictedCoverage>,
+}
+
+/// Composite several strokes of **one gesture** (a stroke and its symmetry replicas) over `base`
+/// into `target` for `region ∩ clip`: `target = base ⊕ parts[0] ⊕ parts[1] ⊕ …`, each `⊕` being
+/// exactly the per-pixel operation of [`StrokeRenderer::render_into`] (module docs). The result
+/// equals committing the strokes one after another, so the document's stroke records reproduce
+/// the pixels. Pixels in the region that no part covers are restored to `base`.
+///
+/// All parts must have been begun with the same clip (the first part's clip bounds the write);
+/// selection, opacity, mode and alpha lock are taken from each part.
+pub fn composite_layered(base: &TileGrid, parts: &[LayeredPart<'_>], target: &mut TileGrid, region: RectI) {
+    let Some(first) = parts.first() else { return };
+    let area = region.intersect(&first.stroke.ctx.clip);
+    if area.is_empty() {
+        return;
+    }
+    for c in TileGrid::tiles_in_rect(area) {
+        let tr = c.rect();
+        let ir = tr.intersect(&area);
+        let base_t = base.tile(c);
+        // Parts that can change this tile: they have coverage here and their mode can act on it.
+        let active: Vec<_> = parts
+            .iter()
+            .filter_map(|p| {
+                let s = p.stroke;
+                if s.mode == StrokeMode::Erase && s.ctx.alpha_lock {
+                    return None;
+                }
+                let cov = p.predicted.map_or(&s.pipe.cov, |q| &q.cov);
+                let sel = s.ctx.selection.as_ref().map(|m| (m.tile(c), m.default_value()));
+                cov.tile(c).map(|t| (s, t, sel))
+            })
+            .collect();
+        if active.is_empty() {
+            restore_base(target, base_t, c, ir);
+            continue;
+        }
+        let tt = target.tile_mut(c);
+        let px = tt.pixels_mut();
+        for y in ir.y0..ir.y1 {
+            let ly = (y - tr.y0) as usize;
+            for x in ir.x0..ir.x1 {
+                let lx = (x - tr.x0) as usize;
+                let i = ly * T + lx;
+                let mut out: Px16 = match base_t {
+                    Some(t) => {
+                        let s = &t.pixels()[i * 4..i * 4 + 4];
+                        [s[0], s[1], s[2], s[3]]
+                    }
+                    None => [0; 4],
+                };
+                for (s, cov_t, sel) in &active {
+                    let mut k = cov_t[i];
+                    if k == 0 {
+                        continue;
+                    }
+                    k = mul65535(k, s.opacity16);
+                    if let Some((st, dv)) = sel {
+                        let s8 = st.map_or(*dv, |t| t.get(lx as u32, ly as u32));
+                        k = mul65535(k, cov8_to_16(s8));
+                    }
+                    if k == 0 {
+                        continue;
+                    }
+                    out = match (s.mode, s.ctx.alpha_lock) {
+                        (StrokeMode::Erase, _) => ops::erase(out, k),
+                        (StrokeMode::Paint, false) => ops::src_over(out, ops::scale(s.color_px, k)),
+                        (StrokeMode::Paint, true) => ops::src_atop(out, ops::scale(s.color_px, k)),
+                    };
+                }
+                px[i * 4..i * 4 + 4].copy_from_slice(&out);
+            }
+        }
+        if base_t.is_none() && tt.is_transparent() {
+            target.remove_tile(c);
         }
     }
 }

@@ -232,7 +232,7 @@ fn run(args: &[String]) -> R<Value> {
                     },
                 )?;
             } else {
-                exec(&mut s, Command::StrokeBegin { eraser: false })?;
+                exec(&mut s, Command::StrokeBegin { eraser: false, tool: None })?;
             }
             let mut lat = Vec::with_capacity(samples / 4 + 1);
             let t0 = Instant::now();

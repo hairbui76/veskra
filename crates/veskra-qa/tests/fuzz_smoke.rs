@@ -413,6 +413,17 @@ const COMMANDS: &[&str] = &[
     "input.reset",
     "export.preflight",
     "export.run",
+    // stroke-time tools
+    "symmetry.set",
+    "symmetry.get",
+    "guide.set",
+    "guide.get",
+    "tool.set",
+    "tool.get",
+    "shape.line",
+    "shape.rect",
+    "shape.ellipse",
+    "shape.path",
 ];
 
 fn interesting_value(rng: &mut Rng, layer_ids: &[String]) -> Value {
@@ -978,6 +989,18 @@ fn regenerate() {
         r#"{"cmd":"export.preflight","format":"svg","options":{"includeVectorPaths":true,"includeRasterAppearance":false,"embedColorProfile":true}}"#,
         r#"{"cmd":"export.run","format":"psd","path":"f.psd"}"#,
         r#"{"cmd":"export.run","format":"pdf","path":"f.pdf","options":{"includeVectorPaths":false,"includeRasterAppearance":true,"embedColorProfile":false,"rasterScale":2.0}}"#,
+        // stroke-time tools: symmetry / guides / tool / shapes
+        r#"{"cmd":"symmetry.set","mode":"radial","count":5,"mirror":true,"cx":30,"cy":20}"#,
+        r#"{"cmd":"symmetry.get"}"#,
+        r#"{"cmd":"guide.set","kind":"line","x0":4,"y0":6,"x1":50,"y1":40}"#,
+        r#"{"cmd":"guide.set","kind":"line","angle":0.6}"#,
+        r#"{"cmd":"guide.set","kind":"ellipse","x0":4,"y0":6,"x1":50,"y1":40}"#,
+        r#"{"cmd":"tool.set","tool":"smudge","strength":0.7}"#,
+        r#"{"cmd":"stroke.begin","eraser":false,"tool":"smudge"}"#,
+        r#"{"cmd":"shape.line","x0":3,"y0":4,"x1":60,"y1":40}"#,
+        r#"{"cmd":"shape.rect","x0":8,"y0":6,"x1":50,"y1":40,"fill":true}"#,
+        r#"{"cmd":"shape.ellipse","x0":8,"y0":6,"x1":50,"y1":40,"fill":false}"#,
+        r#"{"cmd":"shape.path","points":[[4,4],[30,40],[55,8],[20,20]],"closed":true,"smooth":true,"fill":true}"#,
     ];
     put("commands/commands.jsonl", (lines.join("\n") + "\n").as_bytes());
 }
