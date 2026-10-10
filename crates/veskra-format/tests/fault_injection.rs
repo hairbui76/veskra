@@ -13,6 +13,17 @@ use veskra_core::{ErrorCode, LayerId, VeskraError};
 use veskra_format::{FormatError, SaveSink, encode, load, remove_stale_temps, save_atomic, save_atomic_with};
 use veskra_raster::TileCoord;
 
+/// "No space left on device" as the platform reports it: raw ENOSPC (28) on Unix, where the
+/// engine also maps the raw code; the portable error kind elsewhere (28 means something else on
+/// Windows).
+fn storage_full_error() -> std::io::Error {
+    if cfg!(unix) {
+        std::io::Error::from_raw_os_error(28)
+    } else {
+        std::io::Error::from(std::io::ErrorKind::StorageFull)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Fault {
     /// `write` fails once `limit` bytes have been accepted (partial data stays on disk).
@@ -35,7 +46,7 @@ impl Write for FaultySink {
             Fault::WriteAfter { limit, enospc } => {
                 let room = limit.saturating_sub(self.written);
                 if room == 0 {
-                    return Err(if enospc { io::Error::from_raw_os_error(28) } else { io::Error::other("killed") });
+                    return Err(if enospc { storage_full_error() } else { io::Error::other("killed") });
                 }
                 let n = (buf.len() as u64).min(room) as usize;
                 self.f.write_all(&buf[..n])?;

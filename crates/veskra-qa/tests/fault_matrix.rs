@@ -14,6 +14,9 @@
 //!
 //! Real ENOSPC (opt-in, needs root + tmpfs mount): `VESKRA_QA_ENOSPC=1`.
 //! Results: `target/qa/QAP-03/result.json`.
+// The matrix injects faults with Unix permission bits and `chattr`; other hosts have no
+// equivalent, so the whole target is empty there.
+#![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use serde_json::{Value, json};

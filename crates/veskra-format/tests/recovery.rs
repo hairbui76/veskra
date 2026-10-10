@@ -11,6 +11,17 @@ use veskra_core::{DocumentId, LayerId};
 use veskra_format::{AutosaveStore, SaveSink, save_atomic};
 use veskra_raster::TileCoord;
 
+/// "No space left on device" as the platform reports it: raw ENOSPC (28) on Unix, where the
+/// engine also maps the raw code; the portable error kind elsewhere (28 means something else on
+/// Windows).
+fn storage_full_error() -> std::io::Error {
+    if cfg!(unix) {
+        std::io::Error::from_raw_os_error(28)
+    } else {
+        std::io::Error::from(std::io::ErrorKind::StorageFull)
+    }
+}
+
 fn tempdir(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("veskra-recovery-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&d);
@@ -92,7 +103,7 @@ fn failed_checkpoint_keeps_previous_and_leaves_no_temp() {
     let c1 = store.checkpoint(&version(1), &meta()).unwrap();
     let full = |p: &Path| -> io::Result<Box<dyn SaveSink>> {
         let _f = OpenOptions::new().write(true).create_new(true).open(p)?;
-        Err(io::Error::from_raw_os_error(28))
+        Err(storage_full_error())
     };
     let err = store.checkpoint_with(&version(2), &meta(), full).unwrap_err();
     assert!(matches!(err, veskra_format::FormatError::StorageFull));

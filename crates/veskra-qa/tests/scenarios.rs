@@ -21,6 +21,17 @@ use veskra_qa::drive::{Driver, ellipse, line, wave};
 use veskra_qa::report::Report;
 use veskra_qa::{RenderDiff, de00, events, int02, premul8, px_at, repo_root, tools};
 
+/// "No space left on device" as the platform reports it: raw ENOSPC (28) on Unix, where the
+/// engine also maps the raw code; the portable error kind elsewhere (28 means something else on
+/// Windows).
+fn storage_full_error() -> std::io::Error {
+    if cfg!(unix) {
+        std::io::Error::from_raw_os_error(28)
+    } else {
+        std::io::Error::from(std::io::ErrorKind::StorageFull)
+    }
+}
+
 fn p(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -1262,7 +1273,7 @@ mod faulty {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let room = self.limit.saturating_sub(self.written);
             if room == 0 {
-                return Err(io::Error::from_raw_os_error(28));
+                return Err(crate::storage_full_error());
             }
             let n = (buf.len() as u64).min(room) as usize;
             self.f.write_all(&buf[..n])?;
