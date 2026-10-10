@@ -102,6 +102,7 @@ class CommandVocabularyIntegrationTest {
             exec(h, Commands.selectionEllipse(60f, 40f, 160f, 120f, SelectionOp.ADD))
             exec(h, Commands.selectionLasso(listOf(PointF(0f, 0f), PointF(40f, 0f), PointF(0f, 40f)), SelectionOp.SUBTRACT))
             for (op in SelectionOp.entries) exec(h, Commands.selectionRect(20f, 20f, 90f, 70f, op))
+            exec(h, Commands.selectionRect(20f, 20f, 90f, 70f)) // the ops above end on an empty selection
             assertEquals(true, DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)?.hasSelection)
             val outline = exec(h, Commands.selectionOutline()) as JsonObject
             assertEquals(false, outline.bool("empty"))
@@ -133,6 +134,60 @@ class CommandVocabularyIntegrationTest {
             exec(h, Commands.viewSet())
         } finally {
             NativeBridge.nativeDestroySession(h)
+        }
+    }
+
+    @Test
+    fun `raster edit, canvas and export color builders are understood by the engine`() {
+        val h = NativeBridge.nativeCreateSession()
+        val dir = Files.createTempDirectory("veskra-vocab-raster").toFile()
+        try {
+            exec(h, Commands.documentCreate(256, 192, 300, "#FFFFFF"))
+            exec(h, Commands.layerAdd(LayerKind.RASTER, "Paint"))
+            val red = HexColor(0xD03A2F)
+            exec(h, Commands.editGradient(PointF(0f, 0f), PointF(200f, 0f), radial = false, stops = listOf(0f to red, 1f to HexColor.WHITE)))
+            exec(h, Commands.editGradient(PointF(100f, 90f), PointF(160f, 90f), radial = true, stops = listOf(0f to HexColor.BLACK, 1f to red)))
+            exec(h, Commands.selectionWand(100f, 90f, tolerance = 0.3f, contiguous = true, sampleMerged = false, op = SelectionOp.REPLACE))
+            assertEquals(true, DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)?.hasSelection)
+            exec(h, Commands.selectionClear())
+
+            exec(h, Commands.editAdjustHsb(hue = 30f, saturation = -0.2f, brightness = 0f))
+            exec(h, Commands.editAdjustBrightnessContrast(brightness = 0.1f, contrast = 0.25f))
+            exec(h, Commands.editAdjustCurves(mapOf("rgb" to listOf(PointF(0f, 0f), PointF(0.5f, 0.6f), PointF(1f, 1f)), "b" to listOf(PointF(0f, 0.1f), PointF(1f, 0.9f)))))
+            exec(h, Commands.editAdjustInvert())
+            exec(h, Commands.editTransformQuad(listOf(PointF(40f, 10f), PointF(200f, 20f), PointF(220f, 180f), PointF(10f, 170f))))
+
+            exec(h, Commands.canvasCrop(16, 8, 208, 152))
+            var info = DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)!!
+            assertEquals(192 to 144, info.width to info.height)
+            exec(h, Commands.canvasResize(384, 288, resample = true))
+            exec(h, Commands.canvasResize(400, 300, resample = false))
+            info = DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)!!
+            assertEquals(400 to 300, info.width to info.height)
+            exec(h, Commands.historyUndo())
+            assertEquals(384, DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)!!.width)
+
+            exec(h, Commands.inputConfigLockView(true))
+            exec(h, Commands.inputConfigLockView(false))
+
+            // Every target profile at both bit depths; 16-bit PSD in Display P3 is the demanding case.
+            for (profile in ExportProfile.entries) {
+                for (bits in listOf(8, 16)) {
+                    val pf = ExportPreflightInfo.fromJson(exec(h, Commands.exportPreflight(ExportFormat.PNG, ExportOptions(profile = profile, bitDepth = bits)) ) as JsonObject)!!
+                    assertEquals(bits, pf.bitDepth)
+                }
+            }
+            val psd = File(dir, "p3-16.psd")
+            val report = ExportReportInfo.fromJson(
+                exec(h, Commands.exportRun(ExportFormat.PSD, psd.absolutePath, ExportOptions(profile = ExportProfile.DISPLAY_P3, bitDepth = 16))) as JsonObject,
+            )!!
+            assertTrue(report.isTrustworthySuccess, "16-bit Display P3 PSD must validate")
+            assertEquals(16, report.bitDepth)
+            assertTrue(report.profileEmbedded)
+            assertTrue(psd.length() > 0)
+        } finally {
+            NativeBridge.nativeDestroySession(h)
+            dir.deleteRecursively()
         }
     }
 }

@@ -347,6 +347,8 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         val hadSelection = _ui.value.doc?.hasSelection == true || _ui.value.selectionOutline.isNotEmpty()
         val before = _ui.value.doc
         _ui.update { it.copy(doc = info ?: it.doc, layers = layers ?: it.layers, saveStatus = saveMachine.status) }
+        // Fills, transforms, adjustments… change the document without a stroke: checkpoint those too.
+        if (info != null && before != null && info.version != before.version && _ui.value.screen == Screen.EDITOR) scheduleAutosave()
         // Crop / resize (and undoing them) change the canvas size: rebuild the tile display for it.
         if (info != null && before != null && (info.width != before.width || info.height != before.height)) {
             onEngine { s ->
@@ -617,7 +619,16 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         }
         when (tool) {
             Tool.TRANSFORM, Tool.DISTORT -> beginTransform(tool)
-            Tool.CROP -> _ui.update { st -> st.copy(crop = st.doc?.let { RectF(0f, 0f, it.width.toFloat(), it.height.toFloat()) }) }
+            Tool.CROP -> {
+                val doc = _ui.value.doc ?: return
+                _ui.update { it.copy(crop = RectF(0f, 0f, doc.width.toFloat(), doc.height.toFloat())) }
+                // Step back a little so the frame's corner handles are not under the screen edges.
+                val center = _view.value.docToView(PointF(doc.width / 2f, doc.height / 2f))
+                if (!_ui.value.viewLocked) {
+                    navigate(center, PointF(0f, 0f), CROP_ZOOM_OUT, 0f)
+                    endNavigation()
+                }
+            }
             else -> Unit
         }
     }
@@ -1029,11 +1040,15 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     private fun onHistoryChanged(strokeCommitted: Boolean) {
         if (strokeCommitted && !_ui.value.brush.isEraser) noteColorUsed()
         viewModelScope.launch { refreshDocument() }
-        if (strokeCommitted && autosaveJob?.isActive != true) {
-            autosaveJob = viewModelScope.launch {
-                delay(AUTOSAVE_DELAY_MS) // committed strokes recoverable within the 30 s target (MASTER_PLAN §8.1)
-                autosaveNow(resetInput = false)
-            }
+        if (strokeCommitted) scheduleAutosave()
+    }
+
+    /** Committed work is recoverable within the 30 s target (MASTER_PLAN §8.1), whatever tool made it. */
+    private fun scheduleAutosave() {
+        if (autosaveJob?.isActive == true) return
+        autosaveJob = viewModelScope.launch {
+            delay(AUTOSAVE_DELAY_MS)
+            autosaveNow(resetInput = false)
         }
     }
 
@@ -1229,6 +1244,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         private const val MAX_LAYER_NAME_CHARS = 60
         private const val MIN_ZOOM = 0.02f
         private const val MAX_PATH_POINTS = 2000
+        private const val CROP_ZOOM_OUT = 0.8f
         private const val MAX_ZOOM = 64f
 
         @StringRes

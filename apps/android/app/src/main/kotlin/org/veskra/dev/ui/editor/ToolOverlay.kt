@@ -155,6 +155,20 @@ private fun dragShape(tool: Tool): DragShape? = when (tool) {
     else -> null
 }
 
+/** True when the four corners, in order, turn the same way with a clear margin (no fold, no flat corner). */
+private fun isConvex(quad: List<PointF>): Boolean {
+    var sign = 0f
+    for (i in quad.indices) {
+        val a = quad[i]
+        val b = quad[(i + 1) % quad.size]
+        val c = quad[(i + 2) % quad.size]
+        val cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+        if (kotlin.math.abs(cross) < 1f) return false
+        if (sign == 0f) sign = cross else if (sign * cross < 0f) return false
+    }
+    return true
+}
+
 /** Index of the corner of [corners] (view px) within [radius] of [p], or -1. */
 private fun cornerAt(corners: List<Offset>, p: Offset, radius: Float): Int {
     val i = corners.indices.minByOrNull { (p - corners[it]).getDistance() } ?: return -1
@@ -232,7 +246,8 @@ fun ToolOverlay(state: UiState, view: ViewState, vm: VeskraViewModel, modifier: 
                         val from = downDoc ?: return null
                         val to = doc(p) ?: return null
                         val d = to - from
-                        return q.mapIndexed { i, c -> if (quadCorner < 0 || i == quadCorner) c + d else c }
+                        // The engine only maps onto convex quads: a corner stops at the edge of validity.
+                        return q.mapIndexed { i, c -> if (quadCorner < 0 || i == quadCorner) c + d else c }.takeIf(::isConvex)
                     }
 
                     // Crop: a corner handle resizes the frame; anywhere else moves it. Kept on the canvas.

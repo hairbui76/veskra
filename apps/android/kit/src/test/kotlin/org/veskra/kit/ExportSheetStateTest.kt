@@ -10,6 +10,44 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 class ExportSheetStateTest {
+    @Test
+    fun `color space and bit depth options follow the format and keep the profile attached`() {
+        var s = ExportSheetState.initial(ExportDestination.PHOTOSHOP)
+        assertEquals(ExportProfile.DOCUMENT, s.options.profile)
+        assertEquals(8, s.options.bitDepth)
+        assertTrue(s.bitDepthEnabled)
+
+        // A wide-gamut target switches embedding on and locks it: untagged P3 numbers would be wrong everywhere.
+        s = s.reduce(ExportSheetEvent.SetEmbedColorProfile(false)).reduce(ExportSheetEvent.SetProfile(ExportProfile.DISPLAY_P3))
+        assertTrue(s.options.embedColorProfile)
+        assertTrue(s.embedProfileLocked)
+        assertTrue(s.reduce(ExportSheetEvent.SetEmbedColorProfile(false)).options.embedColorProfile)
+        assertFalse(ExportOptions(embedColorProfile = false, profile = ExportProfile.ADOBE_RGB).isValidFor(ExportFormat.PSD))
+        s = s.reduce(ExportSheetEvent.SetProfile(ExportProfile.SRGB))
+        assertFalse(s.embedProfileLocked)
+        assertFalse(s.reduce(ExportSheetEvent.SetEmbedColorProfile(false)).options.embedColorProfile)
+
+        s = s.reduce(ExportSheetEvent.SetBitDepth(16))
+        assertEquals(16, s.effectiveOptions.bitDepth)
+        assertEquals(s.options, s.reduce(ExportSheetEvent.SetBitDepth(12)).options, "only 8 and 16 exist")
+        assertEquals(
+            """{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"srgb","bitDepth":16}""",
+            s.effectiveOptions.toJson().encode(),
+        )
+
+        // SVG/PDF are written at 8 bits: the choice is neither offered nor sent for them.
+        var svg = ExportSheetState(ExportDestination.ILLUSTRATOR, ExportFormat.SVG, s.options)
+        assertFalse(svg.bitDepthEnabled)
+        assertEquals(8, svg.effectiveOptions.bitDepth)
+        svg = svg.reduce(ExportSheetEvent.SetBitDepth(8))
+        assertEquals(16, svg.options.bitDepth, "remembered for the formats that support it")
+
+        // Preferences written before these options existed still load, with the defaults.
+        val old = Json.parseObject("""{"includeVectorPaths":true,"includeRasterAppearance":false,"embedColorProfile":true}""")
+        assertEquals(ExportOptions(includeRasterAppearance = false), ExportOptions.fromJson(old))
+        assertEquals(s.options, ExportOptions.fromJson(s.options.toJson()))
+    }
+
     private fun preflight(format: ExportFormat, blocked: String? = null) = ExportPreflightInfo(
         format = format, blockedReason = blocked, vectorPathCount = 12, rasterOnlyStrokeCount = 3,
         rasterizedLayerCount = 1, profile = "sRGB IEC61966-2.1", widthPx = 100, heightPx = 100,

@@ -43,6 +43,7 @@ import org.veskra.kit.ExportCopy
 import org.veskra.kit.ExportDestination
 import org.veskra.kit.ExportFileNames
 import org.veskra.kit.ExportFormat
+import org.veskra.kit.ExportProfile
 import org.veskra.kit.ExportPhase
 import org.veskra.kit.ExportSheetEvent
 import org.veskra.kit.ExportSheetState
@@ -126,11 +127,40 @@ fun ExportSheet(export: ExportSheetState, state: UiState, vm: VeskraViewModel) {
                     enabled = !exporting,
                 ) { vm.onExportEvent(ExportSheetEvent.SetIncludeRasterAppearance(it)) }
             }
+            Text(stringResource(R.string.export_color_space), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExportProfile.entries.forEach { p ->
+                    FilterChip(
+                        selected = export.options.profile == p,
+                        enabled = !exporting,
+                        onClick = { vm.onExportEvent(ExportSheetEvent.SetProfile(p)) },
+                        label = { Text(stringResource(profileLabel(p))) },
+                    )
+                }
+            }
+            Text(
+                stringResource(if (export.options.profile == ExportProfile.DOCUMENT) R.string.export_color_space_keep else R.string.export_color_space_convert),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (export.bitDepthEnabled) {
+                Text(stringResource(R.string.export_bit_depth), style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (bits in listOf(8, 16)) {
+                        FilterChip(
+                            selected = export.options.bitDepth == bits,
+                            enabled = !exporting,
+                            onClick = { vm.onExportEvent(ExportSheetEvent.SetBitDepth(bits)) },
+                            label = { Text(stringResource(R.string.export_bit_depth_value, bits)) },
+                        )
+                    }
+                }
+                if (export.options.bitDepth == 16) Text(stringResource(R.string.export_bit_depth_16_help), style = MaterialTheme.typography.bodySmall)
+            }
             OptionRow(
                 label = stringResource(R.string.export_opt_profile),
-                help = stringResource(R.string.export_opt_profile_help),
+                help = stringResource(if (export.embedProfileLocked) R.string.export_opt_profile_locked else R.string.export_opt_profile_help),
                 checked = export.options.embedColorProfile,
-                enabled = !exporting,
+                enabled = !exporting && !export.embedProfileLocked,
             ) { vm.onExportEvent(ExportSheetEvent.SetEmbedColorProfile(it)) }
 
             if (export.destination == ExportDestination.ILLUSTRATOR) {
@@ -192,6 +222,14 @@ private fun OptionRow(label: String, help: String, checked: Boolean, enabled: Bo
     }
 }
 
+@StringRes
+private fun profileLabel(p: ExportProfile): Int = when (p) {
+    ExportProfile.DOCUMENT -> R.string.export_profile_document
+    ExportProfile.SRGB -> R.string.export_profile_srgb
+    ExportProfile.DISPLAY_P3 -> R.string.export_profile_display_p3
+    ExportProfile.ADOBE_RGB -> R.string.export_profile_adobe_rgb
+}
+
 /** Counts before export (MASTER_PLAN §2.3); same rules as ExportCopy.summaryLines, localized. */
 @Composable
 private fun PreflightSummary(export: ExportSheetState) {
@@ -213,6 +251,8 @@ private fun PreflightSummary(export: ExportSheetState) {
                 }
                 Text(pluralStringResource(R.plurals.export_rasterized_layers, info.rasterizedLayerCount, info.rasterizedLayerCount))
                 Text(stringResource(R.string.export_profile_line, info.profile))
+                if (info.bitDepth == 16) Text(stringResource(R.string.export_bit_depth_value, 16))
+                if (info.gamutClippingPossible) Text(stringResource(R.string.export_gamut_note))
                 info.warnings.forEach { w -> Text("• ${w.message}", style = MaterialTheme.typography.bodySmall) }
             }
         }
@@ -240,6 +280,7 @@ private fun PhaseStatus(export: ExportSheetState, onAcknowledge: () -> Unit) {
                     ph.report.profile,
                 ),
             )
+            if (ph.report.outOfGamutPixels > 0) Text(stringResource(R.string.export_clipped_pixels, ph.report.outOfGamutPixels))
             ph.report.warnings.forEach { w -> Text("• ${w.message}", style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = onAcknowledge) { Text(stringResource(R.string.action_ok)) }
         }

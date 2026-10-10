@@ -104,6 +104,8 @@ sealed interface ExportSheetEvent {
     data class SetIncludeVectorPaths(val value: Boolean) : ExportSheetEvent
     data class SetIncludeRasterAppearance(val value: Boolean) : ExportSheetEvent
     data class SetEmbedColorProfile(val value: Boolean) : ExportSheetEvent
+    data class SetProfile(val profile: ExportProfile) : ExportSheetEvent
+    data class SetBitDepth(val bits: Int) : ExportSheetEvent
     data class PreflightStarted(val key: PreflightKey) : ExportSheetEvent
     data class PreflightLoaded(val key: PreflightKey, val info: ExportPreflightInfo) : ExportSheetEvent
     data class PreflightFailed(val key: PreflightKey, val error: EngineError) : ExportSheetEvent
@@ -147,9 +149,22 @@ data class ExportSheetState(
             else -> null
         }
 
-    /** Options sent to the engine: vector/raster flags are only meaningful for SVG/PDF. */
+    /** The profile cannot be left out while converting to a wide-gamut target. */
+    val embedProfileLocked: Boolean get() = options.profile.requiresEmbeddedProfile
+
+    /** 16-bit is offered only where the file format can carry it. */
+    val bitDepthEnabled: Boolean get() = format.supports16Bit
+
+    /**
+     * Options sent to the engine: vector/raster flags are only meaningful for SVG/PDF, 16-bit only
+     * for PNG/PSD (a remembered choice stays in [options] and applies again when the format allows).
+     */
     val effectiveOptions: ExportOptions
-        get() = if (format.isIllustratorHandoff) options else ExportOptions(embedColorProfile = options.embedColorProfile)
+        get() = if (format.isIllustratorHandoff) {
+            options.copy(bitDepth = 8)
+        } else {
+            options.copy(includeVectorPaths = true, includeRasterAppearance = true, bitDepth = if (bitDepthEnabled) options.bitDepth else 8)
+        }
 
     val preflightKey: PreflightKey get() = PreflightKey(format, effectiveOptions)
 
@@ -184,7 +199,27 @@ data class ExportSheetState(
         is ExportSheetEvent.SetIncludeRasterAppearance ->
             if (vectorRasterTogglesEnabled && phase !is ExportPhase.Exporting) copy(options = options.copy(includeRasterAppearance = e.value), phase = ExportPhase.Editing) else this
         is ExportSheetEvent.SetEmbedColorProfile ->
-            if (phase !is ExportPhase.Exporting) copy(options = options.copy(embedColorProfile = e.value), phase = ExportPhase.Editing) else this
+            if (phase !is ExportPhase.Exporting && (e.value || !embedProfileLocked)) {
+                copy(options = options.copy(embedColorProfile = e.value), phase = ExportPhase.Editing)
+            } else {
+                this
+            }
+        // Choosing a wide-gamut target switches profile embedding on (visibly: the checkbox locks).
+        is ExportSheetEvent.SetProfile ->
+            if (phase !is ExportPhase.Exporting) {
+                copy(
+                    options = options.copy(profile = e.profile, embedColorProfile = options.embedColorProfile || e.profile.requiresEmbeddedProfile),
+                    phase = ExportPhase.Editing,
+                )
+            } else {
+                this
+            }
+        is ExportSheetEvent.SetBitDepth ->
+            if (phase !is ExportPhase.Exporting && bitDepthEnabled && (e.bits == 8 || e.bits == 16)) {
+                copy(options = options.copy(bitDepth = e.bits), phase = ExportPhase.Editing)
+            } else {
+                this
+            }
         is ExportSheetEvent.PreflightStarted -> if (e.key == preflightKey) copy(preflight = PreflightState.Loading(e.key)) else this
         is ExportSheetEvent.PreflightLoaded -> if (e.key == preflightKey) copy(preflight = PreflightState.Ready(e.key, e.info)) else this
         is ExportSheetEvent.PreflightFailed -> if (e.key == preflightKey) copy(preflight = PreflightState.Failed(e.key, e.error)) else this
@@ -218,6 +253,18 @@ object ExportCopy {
     const val VECTOR_LABEL: String = "Editable vector strokes"
     const val RASTER_LABEL: String = "Preserve original appearance"
     const val PROFILE_LABEL: String = "Embed color profile"
+    const val COLOR_SPACE_LABEL: String = "Color space"
+    const val BIT_DEPTH_LABEL: String = "Bit depth"
+    const val GAMUT_NOTE: String = "Colors outside the chosen color space will be clipped to the nearest color it can hold."
+
+    fun profileLabel(p: ExportProfile): String = when (p) {
+        ExportProfile.DOCUMENT -> "Same as canvas"
+        ExportProfile.SRGB -> "sRGB"
+        ExportProfile.DISPLAY_P3 -> "Display P3"
+        ExportProfile.ADOBE_RGB -> "Adobe RGB (1998) compatible"
+    }
+
+    fun bitDepthLabel(bits: Int): String = "$bits-bit"
     const val BOTH_OFF_MESSAGE: String =
         "Select “Editable vector strokes”, “Preserve original appearance”, or both to export SVG or PDF."
     const val NOT_VERIFIED_MESSAGE: String =
@@ -250,14 +297,17 @@ object ExportCopy {
         }
         add(rasterizedLayers(info.rasterizedLayerCount))
         add(profile(info.profile))
+        if (info.bitDepth == 16) add(bitDepthLabel(16))
+        if (info.gamutClippingPossible) add(GAMUT_NOTE)
         info.warnings.forEach { add(it.message) }
     }
 
     /** Every fixed user-facing string (for wording audits). */
     fun allFixedStrings(): List<String> = listOf(
         ILLUSTRATOR_TITLE, PHOTOSHOP_TITLE, IMAGE_TITLE, VECTOR_LABEL, RASTER_LABEL, PROFILE_LABEL,
-        BOTH_OFF_MESSAGE, NOT_VERIFIED_MESSAGE, ILLUSTRATOR_HINT,
-    ) + ExportFormat.entries.map(::formatLabel) + ExportDestination.entries.map(::destinationTitle)
+        BOTH_OFF_MESSAGE, NOT_VERIFIED_MESSAGE, ILLUSTRATOR_HINT, COLOR_SPACE_LABEL, BIT_DEPTH_LABEL, GAMUT_NOTE,
+    ) + ExportFormat.entries.map(::formatLabel) + ExportDestination.entries.map(::destinationTitle) +
+        ExportProfile.entries.map(::profileLabel)
 }
 
 /** Safe default export/save file names (no path separators, never an `.ai` extension). */
