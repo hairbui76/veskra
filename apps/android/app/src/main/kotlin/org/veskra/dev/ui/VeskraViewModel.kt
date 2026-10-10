@@ -184,7 +184,7 @@ data class UiState(
     val lastEraser: BrushPreset = BrushPreset.ERASER_HARD,
     /** The pen smudges (drags existing paint) instead of painting with [brush]. */
     val smudge: Boolean = false,
-    val smudgeStrength: Float = 0.5f,
+    val smudgeStrength: Float = 0.75f,
     val color: HexColor = HexColor.BLACK,
     val secondaryColor: HexColor = HexColor.WHITE,
     val recentColors: List<HexColor> = emptyList(),

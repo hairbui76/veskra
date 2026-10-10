@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.os.Build
 import android.view.MotionEvent
 import android.view.View
@@ -44,6 +45,7 @@ class CanvasView(context: Context) : View(context) {
     }
 
     private val tilePaint = Paint().apply { isFilterBitmap = true }
+    private val tileDst = RectF()
     private val paperEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 0f // hairline regardless of zoom
@@ -152,7 +154,13 @@ class CanvasView(context: Context) : View(context) {
         canvas.concat(d.matrix)
         // Smooth when minified or rotated; nearest-neighbour at >= 100% for crisp pixel inspection.
         tilePaint.isFilterBitmap = d.view.zoom < 1f || d.view.rotation != 0f
-        d.forEachTile { canvas.drawBitmap(it.bitmap, it.left, it.top, tilePaint) }
+        // Tile edges rarely land on whole device pixels; without a small overlap the anti-aliased
+        // edges of neighbouring tiles leave hairline seams. One device pixel of overlap hides them.
+        val overlap = 1f / d.view.zoom.coerceAtLeast(1e-3f)
+        d.forEachTile {
+            tileDst.set(it.left, it.top, it.left + it.bitmap.width + overlap, it.top + it.bitmap.height + overlap)
+            canvas.drawBitmap(it.bitmap, null, tileDst, tilePaint)
+        }
         canvas.drawRect(0f, 0f, d.docWidth.toFloat(), d.docHeight.toFloat(), paperEdgePaint)
         canvas.restore()
         if (!hoverX.isNaN()) {

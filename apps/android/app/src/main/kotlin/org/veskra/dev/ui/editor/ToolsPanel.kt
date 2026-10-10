@@ -1,7 +1,5 @@
 package org.veskra.dev.ui.editor
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,11 +52,12 @@ private class ToolSection(@param:StringRes val title: Int, val items: List<ToolI
 /**
  * Tools panel: everything that is not a brush, grouped like a painter's toolbox — a Create tab
  * (things that add marks or help draw them) and an Edit tab (things that change what is there).
+ * [onImportImage] opens the system picker; its launcher lives in the editor screen because this
+ * panel leaves the composition as soon as something is chosen.
  */
 @Composable
-fun ToolsPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifier) {
+fun ToolsPanel(state: UiState, vm: VeskraViewModel, onImportImage: () -> Unit, modifier: Modifier = Modifier) {
     var editTab by rememberSaveable { mutableStateOf(false) }
-    val importImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) vm.importImage(uri) }
     fun tool(icon: ImageVector, @StringRes label: Int, t: Tool) = ToolItem(icon, label, active = state.tool == t) { vm.setTool(t) }
     fun symmetry(icon: ImageVector, @StringRes label: Int, mode: SymmetryMode) = ToolItem(icon, label, active = state.symmetry == mode) {
         vm.setSymmetry(if (state.symmetry == mode) SymmetryMode.OFF else mode)
@@ -71,7 +70,7 @@ fun ToolsPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
                 tool(VeskraIcons.Fill, R.string.tool_fill, Tool.FILL),
                 tool(VeskraIcons.Gradient, R.string.tool_gradient, Tool.GRADIENT),
                 ToolItem(VeskraIcons.Text, R.string.tool_text) { vm.showTextDialog(true) },
-                ToolItem(VeskraIcons.Image, R.string.tool_import_image) { importImage.launch("image/*") },
+                ToolItem(VeskraIcons.Image, R.string.tool_import_image) { onImportImage() },
                 tool(VeskraIcons.Eyedropper, R.string.tool_eyedropper, Tool.EYEDROPPER),
             ),
         ),
@@ -159,7 +158,8 @@ fun ToolsPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
                 Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).padding(top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                (if (editTab) edit else create).forEach { section -> Section(section) }
+                // Choosing anything closes the panel, toggles included: the canvas is what matters next.
+                (if (editTab) edit else create).forEach { section -> Section(section, onChosen = { vm.openSheet(null) }) }
             }
         }
     }
@@ -186,15 +186,15 @@ private fun TabTitle(text: String, selected: Boolean, modifier: Modifier = Modif
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Section(section: ToolSection) {
+private fun Section(section: ToolSection, onChosen: () -> Unit) {
     PanelLabel(stringResource(section.title), Modifier.padding(start = 8.dp, top = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        section.items.forEach { item -> Cell(item) }
+        section.items.forEach { item -> Cell(item, onChosen) }
     }
 }
 
 @Composable
-private fun Cell(item: ToolItem) {
+private fun Cell(item: ToolItem, onChosen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -202,7 +202,10 @@ private fun Cell(item: ToolItem) {
             .width(84.dp)
             .heightIn(min = 72.dp)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(role = Role.Button, onClick = item.onClick)
+            .clickable(role = Role.Button) {
+                onChosen()
+                item.onClick()
+            }
             .semantics(mergeDescendants = true) { selected = item.active }
             .padding(vertical = 6.dp),
     ) {

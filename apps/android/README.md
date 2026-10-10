@@ -150,7 +150,9 @@ cd apps/android && ./gradlew :app:assembleDebug :app:lint
 ```
 
 `scripts/build-rust.sh` uses `cargo ndk -t arm64-v8a -t x86_64 --platform 29 -o app/src/main/jniLibs
-build -p veskra-ffi --release --locked`. Generated `.so` files are git-ignored. An APK built without
+build -p veskra-ffi --release --locked`. Without cargo-ndk, point cargo at the NDK linker instead, e.g.
+for the emulator ABI: `CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=<ndk>/toolchains/llvm/prebuilt/<host>/bin/x86_64-linux-android29-clang cargo build -p veskra-ffi --release --target x86_64-linux-android --locked`
+and copy `target/x86_64-linux-android/release/libveskra_ffi.so` into `app/src/main/jniLibs/x86_64/`. Generated `.so` files are git-ignored. An APK built without
 the library starts and shows "Drawing engine unavailable" instead of crashing.
 
 ## Verification (honest status)
@@ -160,7 +162,9 @@ the library starts and shows "Drawing engine unavailable" instead of crashing.
 | `./gradlew :kit:build :kit:test` | **Run here: BUILD SUCCESSFUL. 88 tests: 87 passed, 0 failed, 1 skipped** (`NativeBridgeIntegrationTest`, no `veskra.ffi.lib`). |
 | JNI integration test against a real `.so` | **Not run.** `crates/veskra-ffi` (owned by another agent, in progress) did not compile at the time of writing (`cargo build -p veskra-ffi`: 7 errors in `bridge.rs`). |
 | `:app` compile, lint, APK | **Run 2026-10-10 (Windows host, SDK 36, NDK 28.2 instead of the pinned 27.0):** `assembleDebug` succeeds; `lintDebug` 0 errors, 12 warnings. Only the x86_64 `.so` was built (linker env vars, no cargo-ndk), so that APK runs on the emulator only. |
-| Emulator smoke test (Pixel Tablet AVD, API 36, mouse input) | **Run 2026-10-10:** new canvas, all brush presets, eraser, undo/redo, layers, color panel tabs, fill, rect selection + fill, text, transform, save, reopen, recovery, PNG/PSD/SVG/PDF export through SAF. |
+| Emulator smoke test (Pixel Tablet AVD, API 36, single-pointer `adb input`) | **Run 2026-10-10:** new canvas, all brush presets, eraser, smudge, undo/redo, layers, color panel tabs, eyedropper, fill, linear/radial gradient, rect/ellipse/wand selection with outline, text, transform, distort (move), color adjust, curves, crop + undo, symmetry (vertical, radial), line guide, rectangle/circle/path shapes, camera lock toggle, save, reopen, recovery after tool edits, PNG/PSD/SVG/PDF export through SAF, 16-bit Display P3 PSD export (file header and ICC resource checked on the host). |
+| Kotlin ↔ engine contract (`CommandVocabularyIntegrationTest`, JNI on the host JVM) | **Run 2026-10-10:** every `Commands` builder, all export profiles at 8 and 16 bit. `:kit:test`: 105 tests, 0 failed, 0 skipped with `-Pveskra.ffi.lib`. |
+| Not exercised on the emulator | Lasso with a real loop, image import, layer masks, ellipse guide, canvas resize dialog (typing), distort by corner, two-finger navigation inside tool overlays (no multi-touch injection). |
 | Device behavior: stylus, pressure/tilt, prediction, palm, multi-touch gestures, latency, rotation, lifecycle, SAF providers | **Not run:** no physical device; the emulator was driven with single-pointer `adb input`. Needs AND-03/AND-05/AND-09 hardware evidence. |
 | Accessibility (TalkBack), measured 48 dp targets | **Not run.** Targets are by construction (48 dp boxes / `heightIn(48.dp)`), not measured. |
 | `scripts/build-rust.sh` | **Not run — BLOCKED:** no NDK. Syntax-checked with `bash -n` only. |

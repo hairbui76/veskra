@@ -1,6 +1,8 @@
 package org.veskra.dev.ui.editor
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,6 +80,7 @@ import kotlin.math.roundToInt
 fun EditorScreen(state: UiState, vm: VeskraViewModel) {
     val host = vm.engine ?: return
     val view by vm.view.collectAsStateWithLifecycle()
+    val importImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) vm.importImage(uri) }
 
     // Back peels one layer at a time: panel → active tool → gallery (keeping a recovery checkpoint).
     BackHandler {
@@ -144,7 +147,7 @@ fun EditorScreen(state: UiState, vm: VeskraViewModel) {
                 when (panel) {
                     EditorSheet.BRUSH -> BrushPanel(state, vm, above)
                     EditorSheet.COLOR -> ColorPanel(state, vm, above)
-                    EditorSheet.TOOLS -> ToolsPanel(state, vm, below)
+                    EditorSheet.TOOLS -> ToolsPanel(state, vm, onImportImage = { importImage.launch("image/*") }, modifier = below)
                     EditorSheet.LAYERS -> LayerPanel(state, vm, below)
                     EditorSheet.EXPORT -> Unit
                 }
