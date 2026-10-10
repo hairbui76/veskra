@@ -22,10 +22,10 @@ use veskra_doc::{
     DocColor, Document, GroupContent, History, HistoryConfig, LayerKind, LayerPatch, LayerProps, PixelContent,
     Placement, StrokeMode, VectorFidelity,
 };
-
-mod tools;
 use veskra_input::{InputAction, InputArbiter, InputConfig, RawPointerEvent, ViewTransform};
 use veskra_raster::{MaskGrid, MaskOp, TileGrid};
+
+mod tools;
 
 pub type EResult<T> = Result<T, VeskraError>;
 
