@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Veskra — open-source drawing app for Android tablets</title>
+  <meta name="description" content="Veskra is a free, open-source, offline drawing app for Android tablets, with layered PSD and Illustrator-ready SVG/PDF export that keeps track of color.">
+  <meta name="theme-color" content="#FFD228">
+  <link rel="canonical" href="https://veskra.hairbui76.id.vn/">
+  <link rel="alternate" hreflang="en" href="https://veskra.hairbui76.id.vn/?lang=en">
+  <link rel="alternate" hreflang="vi" href="https://veskra.hairbui76.id.vn/?lang=vi">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Veskra — paint on a tablet, export like a studio">
+  <meta property="og:description" content="Free, open-source, offline drawing app for Android tablets. Layered PSD, Illustrator-ready SVG/PDF, honest color.">
+  <meta property="og:url" content="https://veskra.hairbui76.id.vn/">
+  <meta property="og:image" content="https://veskra.hairbui76.id.vn/assets/og.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="Veskra">
+      <span class="brand-mark" aria-hidden="true">V</span>
+      <span class="brand-word">Veskra</span>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#color" data-i18n="nav.color">Color</a>
+      <a href="#download" data-i18n="nav.download">Download</a>
+      <a href="https://github.com/hairbui76/veskra" rel="noopener">GitHub</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="vi" aria-pressed="false">VI</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="pill rise" style="--d:0">
+          <span class="dot" aria-hidden="true"></span>
+          <span data-i18n="hero.badge">Alpha test build · Android 10+</span>
+          <span class="pill-version" data-release="version">v0.1.0-alpha.1</span>
+        </p>
+        <h1 class="rise" style="--d:1">
+          <span data-i18n="hero.title1">Paint on a tablet.</span>
+          <span class="hl" data-i18n="hero.title2">Export like a studio.</span>
+        </h1>
+        <p class="lede rise" style="--d:2" data-i18n="hero.lede">A free, open-source drawing app for Android tablets. It works offline, keeps the canvas out of your way, and hands your work to Photoshop and Illustrator as layered PSD and SVG/PDF — with the color profile written in.</p>
+        <div class="cta rise" style="--d:3">
+          <a class="btn btn-big btn-yellow" data-release-asset="arm64-v8a" href="https://github.com/hairbui76/veskra/releases/download/v0.1.0-alpha.1/veskra-0.1.0-alpha.1-arm64-v8a.apk">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"/></svg>
+            <span data-i18n="hero.cta">Download APK</span>
+            <small data-release-size="arm64-v8a">5.7 MB</small>
+          </a>
+          <a class="btn btn-white" href="#download" data-i18n="hero.other">Other builds</a>
+        </div>
+        <p class="fine rise" style="--d:4" data-i18n="hero.fine">For most tablets and phones (arm64). Free · No account · No ads · No internet permission.</p>
+      </div>
+
+      <div class="hero-art rise" style="--d:2">
+        <figure class="device">
+          <img src="assets/screen-editor.webp" width="1600" height="973" alt="Veskra editor on an Android tablet: a sky gradient with an orange sun over green ground, floating controls at the corners and a dock at the bottom." data-i18n-alt="hero.alt">
+        </figure>
+        <span class="chip chip-1" style="--c:#1E50B4"><i></i><code>#1E50B4</code></span>
+        <span class="chip chip-2" style="--c:#FF6E2D"><i></i><code>#FF6E2D</code></span>
+        <span class="chip chip-3" style="--c:#1E6E23"><i></i><code>#1E6E23</code></span>
+        <span class="sticker" aria-hidden="true" data-i18n="hero.sticker">made in Rust</span>
+      </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="marquee-wrap" aria-hidden="true"><div class="marquee">
+      <div class="marquee-track">
+        <span>Brush</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span>
+        <span>Brush</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span>
+      </div>
+    </div></div>
+
+    <!-- FEATURES -->
+    <section class="section" id="features">
+      <header class="section-head">
+        <p class="kicker" data-i18n="feat.kicker">01 — What's inside</p>
+        <h2 data-i18n="feat.title">The tools you reach for, nothing you scroll past.</h2>
+      </header>
+      <div class="cards">
+        <article class="card" style="--bg:#FFD228">
+          <span class="card-no">A</span>
+          <h3 data-i18n="feat.canvas.t">The canvas gets the screen</h3>
+          <p data-i18n="feat.canvas.d">Controls float in the corners and a small dock holds brush, smudge, eraser and two colors. Everything else opens when you need it and closes when you are back to drawing.</p>
+        </article>
+        <article class="card" style="--bg:#6EC3A0">
+          <span class="card-no">B</span>
+          <h3 data-i18n="feat.picker.t">Four ways to pick a color</h3>
+          <p data-i18n="feat.picker.d">Hue wheel, HSB / RGB / LAB / CMYK sliders with hex, palettes including skin tones and your own, and a tone sphere for light and shade. Plus an eyedropper.</p>
+        </article>
+        <article class="card" style="--bg:#F07882">
+          <span class="card-no">C</span>
+          <h3 data-i18n="feat.tools.t">Tools that matter</h3>
+          <p data-i18n="feat.tools.d">Fill, gradient, text, image import, line and ellipse rulers, stroke smoothing, shapes and pen paths, vertical / horizontal / radial symmetry, lasso, wand, transform, distort, color adjust, curves, crop and resize.</p>
+        </article>
+        <article class="card" style="--bg:#3CA0D2">
+          <span class="card-no">D</span>
+          <h3 data-i18n="feat.layers.t">Real layers</h3>
+          <p data-i18n="feat.layers.d">Raster and vector layers with blend modes, opacity, lock transparency, clipping and masks. Strokes on vector layers stay editable paths all the way to Illustrator.</p>
+        </article>
+        <article class="card" style="--bg:#FFFFFF">
+          <span class="card-no">E</span>
+          <h3 data-i18n="feat.private.t">Offline and private</h3>
+          <p data-i18n="feat.private.d">The app does not even ask for internet access. Your artwork stays on your device until you export it, with autosave and crash recovery.</p>
+        </article>
+        <article class="card" style="--bg:#FF6E2D">
+          <span class="card-no">F</span>
+          <h3 data-i18n="feat.open.t">Open source</h3>
+          <p data-i18n="feat.open.d">An independent Rust engine with a Kotlin / Jetpack Compose shell, MIT or Apache-2.0. Read it, build it, fork it.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- SCREENS -->
+    <section class="section screens" aria-labelledby="screens-title">
+      <header class="section-head">
+        <p class="kicker" data-i18n="shots.kicker">02 — A look around</p>
+        <h2 id="screens-title" data-i18n="shots.title">Real screenshots, no mockups.</h2>
+      </header>
+      <div class="shots">
+        <figure class="shot" style="--r:-1.5deg">
+          <a href="assets/screen-color.webp" target="_blank" rel="noopener"><img src="assets/screen-color.webp" width="1600" height="973" loading="lazy" alt="The color panel with a hue ring, a saturation and brightness square and a row of palette swatches." data-i18n-alt="shots.color.alt"></a>
+          <figcaption data-i18n="shots.color">Color wheel + palettes</figcaption>
+        </figure>
+        <figure class="shot" style="--r:1deg">
+          <a href="assets/screen-tools.webp" target="_blank" rel="noopener"><img src="assets/screen-tools.webp" width="1600" height="973" loading="lazy" alt="The tools panel, Create tab: fill, gradient, text, image, eyedropper, rulers, shapes and symmetry." data-i18n-alt="shots.tools.alt"></a>
+          <figcaption data-i18n="shots.tools">Tools, Create tab</figcaption>
+        </figure>
+        <figure class="shot" style="--r:-0.5deg">
+          <a href="assets/screen-export.webp" target="_blank" rel="noopener"><img src="assets/screen-export.webp" width="1600" height="973" loading="lazy" alt="Export for Photoshop with Display P3 and 16-bit selected; the summary says pixels are converted from sRGB with relative colorimetric intent and the profile is embedded." data-i18n-alt="shots.export.alt"></a>
+          <figcaption data-i18n="shots.export">Export: Display P3, 16-bit</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- COLOR -->
+    <section class="section color" id="color">
+      <div class="color-copy">
+        <p class="kicker" data-i18n="color.kicker">03 — Color you can account for</p>
+        <h2 data-i18n="color.title">The file says exactly what color it is.</h2>
+        <p data-i18n="color.lede">Every export carries its ICC profile. Choose the color space the file is written in, and Veskra tells you before you export what will be converted and what might be clipped.</p>
+        <ul class="ticks">
+          <li data-i18n="color.l1">PSD with layers, 8- or 16-bit</li>
+          <li data-i18n="color.l2">SVG / PDF for Illustrator: editable vector strokes, the original look preserved, or both</li>
+          <li data-i18n="color.l3">sRGB, Display P3 or Adobe RGB (1998) compatible output, converted relative colorimetric</li>
+          <li data-i18n="color.l4">A summary before and after every export: vector paths, rasterized layers, clipped pixels</li>
+        </ul>
+        <p class="note" data-i18n="color.note">Honest note: a tablet screen is not a calibrated monitor. The canvas is sRGB, and what you see depends on your display — the exported file is what stays exact.</p>
+      </div>
+      <div class="swatches" role="list">
+        <div class="swatch" role="listitem" style="--c:#FFFFFF;--t:-4deg"><div class="swatch-color"></div><b data-i18n="color.s1">Same as canvas</b><code>no conversion</code></div>
+        <div class="swatch" role="listitem" style="--c:#3CA0D2;--t:3deg"><div class="swatch-color"></div><b>sRGB</b><code>IEC 61966-2.1</code></div>
+        <div class="swatch" role="listitem" style="--c:#FF6E2D;--t:-2deg"><div class="swatch-color"></div><b>Display P3</b><code>wide gamut · ICC</code></div>
+        <div class="swatch" role="listitem" style="--c:#1E6E23;--t:5deg"><div class="swatch-color"></div><b>Adobe RGB (1998)</b><code>compatible · ICC</code></div>
+      </div>
+    </section>
+
+    <!-- DOWNLOAD -->
+    <section class="section download" id="download">
+      <header class="section-head">
+        <p class="kicker" data-i18n="dl.kicker">04 — Get it</p>
+        <h2 data-i18n="dl.title">Download Veskra</h2>
+        <p class="release-line">
+          <span data-i18n="dl.latest">Latest build:</span>
+          <a data-release="link" href="https://github.com/hairbui76/veskra/releases/tag/v0.1.0-alpha.1"><b data-release="version">v0.1.0-alpha.1</b></a>
+          <span data-release="date"></span>
+        </p>
+      </header>
+
+      <div class="builds">
+        <a class="build build-main" data-release-asset="arm64-v8a" href="https://github.com/hairbui76/veskra/releases/download/v0.1.0-alpha.1/veskra-0.1.0-alpha.1-arm64-v8a.apk">
+          <span class="tag" data-i18n="dl.rec">Recommended</span>
+          <strong>arm64-v8a</strong>
+          <span data-i18n="dl.arm">Android tablets and phones — almost every device sold today.</span>
+          <em data-release-size="arm64-v8a">5.7 MB</em>
+        </a>
+        <a class="build" data-release-asset="universal" href="https://github.com/hairbui76/veskra/releases/download/v0.1.0-alpha.1/veskra-0.1.0-alpha.1-universal.apk">
+          <strong>Universal</strong>
+          <span data-i18n="dl.uni">Works on both; pick this if you are not sure.</span>
+          <em data-release-size="universal">8.8 MB</em>
+        </a>
+        <a class="build" data-release-asset="x86_64" href="https://github.com/hairbui76/veskra/releases/download/v0.1.0-alpha.1/veskra-0.1.0-alpha.1-x86_64.apk">
+          <strong>x86_64</strong>
+          <span data-i18n="dl.x86">For the Android emulator on a PC.</span>
+          <em data-release-size="x86_64">6.2 MB</em>
+        </a>
+      </div>
+
+      <div class="install">
+        <ol>
+          <li data-i18n="dl.step1">Download the APK on your tablet.</li>
+          <li data-i18n="dl.step2">Open it and allow “Install unknown apps” for your browser or file manager when Android asks.</li>
+          <li data-i18n="dl.step3">Open Veskra and start a new canvas.</li>
+        </ol>
+        <p class="small">
+          <span data-i18n="dl.checks">Verify your download:</span>
+          <a data-release-asset="sums" href="https://github.com/hairbui76/veskra/releases/download/v0.1.0-alpha.1/SHA256SUMS.txt">SHA256SUMS.txt</a> ·
+          <a href="https://github.com/hairbui76/veskra/releases" data-i18n="dl.all">All releases</a>
+        </p>
+      </div>
+
+      <aside class="warning" role="note">
+        <strong data-i18n="dl.warn.t">This is an alpha.</strong>
+        <span data-i18n="dl.warn.d">So far it has only been tested on an Android tablet emulator, not on real stylus hardware, and exported files have not yet been checked in Photoshop or Illustrator. Expect rough edges — and please report them on GitHub.</span>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand">
+      <span class="brand-mark" aria-hidden="true">V</span>
+      <p data-i18n="foot.line">Veskra — an independent, open-source drawing app for Android tablets.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/hairbui76/veskra">GitHub</a>
+      <a href="https://github.com/hairbui76/veskra/issues" data-i18n="foot.issues">Report a problem</a>
+      <a href="https://github.com/hairbui76/veskra/blob/main/LICENSE-MIT" data-i18n="foot.license">MIT / Apache-2.0</a>
+    </nav>
+    <p class="footer-fine" data-i18n="foot.fine">“Veskra” is a working name. Photoshop and Illustrator are trademarks of Adobe; Veskra is not affiliated with Adobe.</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
