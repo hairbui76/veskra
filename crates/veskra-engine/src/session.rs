@@ -22,6 +22,8 @@ use veskra_doc::{
 use veskra_input::{InputAction, InputArbiter, InputConfig, RawPointerEvent, ViewTransform};
 use veskra_raster::{MaskGrid, MaskOp, TileGrid};
 
+mod raster_tools;
+
 pub type EResult<T> = Result<T, VeskraError>;
 
 /// Fallback pressure for samples whose device reported none (documented; flag cleared).
@@ -715,10 +717,13 @@ impl Session {
                 r.view_changed = true;
                 Ok(r)
             }
-            Command::InputConfig { finger_draws, stylus_button } => {
+            Command::InputConfig { finger_draws, stylus_button, lock_view } => {
                 let mut cfg = self.arbiter.config().clone();
                 if let Some(f) = finger_draws {
                     cfg.finger_draws = f;
+                }
+                if let Some(l) = lock_view {
+                    cfg.lock_view = l;
                 }
                 if let Some(b) = stylus_button {
                     cfg.stylus_button_action = match b.as_str() {
@@ -730,7 +735,16 @@ impl Session {
                     };
                 }
                 self.arbiter.set_config(cfg);
-                Ok(self.receipt(json!({})))
+                let cfg = self.arbiter.config();
+                let button = match cfg.stylus_button_action {
+                    veskra_input::ButtonAction::Eyedropper => "eyedropper",
+                    veskra_input::ButtonAction::ToggleEraser => "toggle_eraser",
+                    veskra_input::ButtonAction::Undo => "undo",
+                    _ => "none",
+                };
+                Ok(self.receipt(
+                    json!({"fingerDraws": cfg.finger_draws, "stylusButton": button, "lockView": cfg.lock_view}),
+                ))
             }
             Command::InputReset => {
                 let actions = self.arbiter.reset();
@@ -752,6 +766,24 @@ impl Session {
                     crate::export_snapshot(&snap, format, &options, Path::new(&path), &veskra_io::CancelToken::new())?;
                 Ok(self.receipt(serde_json::to_value(report).map_err(internal)?))
             }
+            // ===== BEGIN raster-edit / canvas tools (session/raster_tools.rs) =====
+            Command::EditGradient { x0, y0, x1, y1, kind, stops, opacity } => {
+                self.edit_gradient(label, (x0, y0), (x1, y1), kind, stops, opacity)
+            }
+            Command::SelectionWand { x, y, tolerance, contiguous, sample_merged, op } => {
+                self.selection_wand(label, x, y, tolerance, contiguous, sample_merged, op)
+            }
+            Command::EditAdjust { kind, hue, saturation, brightness, contrast, rgb, r, g, b } => {
+                self.edit_adjust(label, kind, hue, saturation, brightness, contrast, [rgb, r, g, b])
+            }
+            Command::EditTransformQuad { quad } => self.edit_transform_quad(label, quad),
+            Command::CanvasCrop { x0, y0, x1, y1 } => self.canvas_crop(label, x0, y0, x1, y1),
+            Command::CanvasResize { width, height, resample, anchor } => {
+                self.canvas_resize(label, width, height, resample, anchor)
+            }
+            Command::SelectionOutline { max_points } => self.selection_outline(max_points),
+            Command::LayerBounds { id } => self.layer_bounds(id),
+            // ===== END raster-edit / canvas tools =====
         }
     }
 
@@ -1301,6 +1333,7 @@ impl Session {
             return Err(VeskraError::new(ErrorCode::InvalidState, "finish or cancel the current stroke first"));
         }
         let cur = self.doc()?.clone();
+        let old = cur.bounds();
         let (label, prev) =
             self.history.undo(cur).ok_or_else(|| VeskraError::new(ErrorCode::NothingToUndo, "nothing to undo"))?;
         let b = prev.bounds();
@@ -1309,6 +1342,7 @@ impl Session {
         let mut r = self.receipt(json!({"undone": label}));
         r.invalidated.push(b);
         r.history_changed = true;
+        self.canvas_changed(old, &mut r); // canvas.crop / canvas.resize steps change the size
         Ok(r)
     }
 
@@ -1317,6 +1351,7 @@ impl Session {
             return Err(VeskraError::new(ErrorCode::InvalidState, "finish or cancel the current stroke first"));
         }
         let cur = self.doc()?.clone();
+        let old = cur.bounds();
         let (label, next) =
             self.history.redo(cur).ok_or_else(|| VeskraError::new(ErrorCode::NothingToRedo, "nothing to redo"))?;
         let b = next.bounds();
@@ -1325,6 +1360,7 @@ impl Session {
         let mut r = self.receipt(json!({"redone": label}));
         r.invalidated.push(b);
         r.history_changed = true;
+        self.canvas_changed(old, &mut r);
         Ok(r)
     }
 

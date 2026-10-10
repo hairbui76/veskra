@@ -70,6 +70,73 @@ pub struct SampleSpec {
     pub azimuth: Option<f32>,
 }
 
+// ===== BEGIN raster-edit / canvas tools: argument types =====
+
+/// `edit.gradient` shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientKindSpec {
+    #[default]
+    Linear,
+    Radial,
+}
+
+/// One `edit.gradient` color stop.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GradientStopSpec {
+    /// Position along the gradient, `0..=1`.
+    pub offset: f64,
+    /// `#RRGGBB` or `#RRGGBBAA` (document working space, like `color.set`).
+    pub color: String,
+}
+
+/// `edit.adjust` kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdjustKindSpec {
+    Hsb,
+    BrightnessContrast,
+    Curves,
+    Invert,
+}
+
+/// `canvas.resize` anchor: which part of the old canvas stays in place when the extent changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AnchorSpec {
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    #[default]
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+}
+
+impl AnchorSpec {
+    /// `(horizontal, vertical)` share of the size difference placed before the old content:
+    /// 0 = none (anchored at the start edge), 1 = half (centered), 2 = all (anchored at the end edge).
+    pub fn factors(self) -> (u8, u8) {
+        match self {
+            AnchorSpec::TopLeft => (0, 0),
+            AnchorSpec::Top => (1, 0),
+            AnchorSpec::TopRight => (2, 0),
+            AnchorSpec::Left => (0, 1),
+            AnchorSpec::Center => (1, 1),
+            AnchorSpec::Right => (2, 1),
+            AnchorSpec::BottomLeft => (0, 2),
+            AnchorSpec::Bottom => (1, 2),
+            AnchorSpec::BottomRight => (2, 2),
+        }
+    }
+}
+
+// ===== END raster-edit / canvas tools: argument types =====
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all_fields = "camelCase", deny_unknown_fields)]
 pub enum Command {
@@ -302,6 +369,9 @@ pub enum Command {
         finger_draws: Option<bool>,
         #[serde(default)]
         stylus_button: Option<String>,
+        /// Camera lock: ignore pan/zoom/rotate gestures (drawing still works).
+        #[serde(default)]
+        lock_view: Option<bool>,
     },
     /// Lifecycle pause: pending stroke handled per `veskra-input` reset policy.
     #[serde(rename = "input.reset")]
@@ -321,6 +391,95 @@ pub enum Command {
         #[serde(default)]
         options: ExportOptions,
     },
+
+    // ===== BEGIN raster-edit / canvas tools (session/raster_tools.rs) =====
+    /// Gradient on the active raster layer (clipped by the selection). Without `stops`:
+    /// foreground color → transparent.
+    #[serde(rename = "edit.gradient")]
+    EditGradient {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        #[serde(default)]
+        kind: GradientKindSpec,
+        #[serde(default)]
+        stops: Option<Vec<GradientStopSpec>>,
+        #[serde(default = "default_one")]
+        opacity: f32,
+    },
+    /// Magic wand: select the bucket-fill region around a document point.
+    #[serde(rename = "selection.wand")]
+    SelectionWand {
+        x: f32,
+        y: f32,
+        #[serde(default = "default_tolerance")]
+        tolerance: f32,
+        #[serde(default = "default_true")]
+        contiguous: bool,
+        #[serde(default)]
+        sample_merged: bool,
+        #[serde(default)]
+        op: SelectionOp,
+    },
+    /// Color adjustment of the active raster layer (selection-weighted). Fields that do not
+    /// belong to `kind` are rejected.
+    #[serde(rename = "edit.adjust")]
+    EditAdjust {
+        kind: AdjustKindSpec,
+        /// `hsb`: degrees, −180..=180.
+        #[serde(default)]
+        hue: Option<f64>,
+        /// `hsb`: −1..=1.
+        #[serde(default)]
+        saturation: Option<f64>,
+        /// `hsb` and `brightness_contrast`: −1..=1.
+        #[serde(default)]
+        brightness: Option<f64>,
+        /// `brightness_contrast`: −1..=1.
+        #[serde(default)]
+        contrast: Option<f64>,
+        /// `curves`: control points `[[in, out], …]` in 0..=1 for all channels.
+        #[serde(default)]
+        rgb: Option<Vec<[f64; 2]>>,
+        #[serde(default)]
+        r: Option<Vec<[f64; 2]>>,
+        #[serde(default)]
+        g: Option<Vec<[f64; 2]>>,
+        #[serde(default)]
+        b: Option<Vec<[f64; 2]>>,
+    },
+    /// Projective transform: map the selection bounds (or the layer's content bounds) onto
+    /// `quad` = `[top-left, top-right, bottom-right, bottom-left]`.
+    #[serde(rename = "edit.transform_quad")]
+    EditTransformQuad { quad: [[f64; 2]; 4] },
+    /// The document becomes this rectangle (rounded to whole pixels).
+    #[serde(rename = "canvas.crop")]
+    CanvasCrop { x0: f64, y0: f64, x1: f64, y1: f64 },
+    /// Change the canvas size: `resample` scales the content, otherwise the extent changes
+    /// around `anchor` (default center).
+    #[serde(rename = "canvas.resize")]
+    CanvasResize {
+        width: u32,
+        height: u32,
+        #[serde(default)]
+        resample: bool,
+        #[serde(default)]
+        anchor: Option<AnchorSpec>,
+    },
+    /// Read-only: the selection boundary as closed polylines (marching ants).
+    #[serde(rename = "selection.outline")]
+    SelectionOutline {
+        #[serde(default)]
+        max_points: Option<u32>,
+    },
+    /// Read-only: tight bounds of a layer's non-transparent content (default: active layer).
+    #[serde(rename = "layer.bounds")]
+    LayerBounds {
+        #[serde(default)]
+        id: Option<String>,
+    },
+    // ===== END raster-edit / canvas tools =====
 }
 
 fn default_dpi() -> f32 {
@@ -334,6 +493,9 @@ fn default_tolerance() -> f32 {
 }
 fn default_true() -> bool {
     true
+}
+fn default_one() -> f32 {
+    1.0
 }
 
 impl Command {
@@ -366,6 +528,14 @@ impl Command {
             Command::EditFill { .. } | Command::EditFillSelection => "Fill",
             Command::EditDeleteSelection => "Delete",
             Command::EditTransform { .. } => "Transform",
+            // ===== BEGIN raster-edit / canvas tools =====
+            Command::EditGradient { .. } => "Gradient",
+            Command::SelectionWand { .. } => "Selection",
+            Command::EditAdjust { .. } => "Adjust",
+            Command::EditTransformQuad { .. } => "Transform",
+            Command::CanvasCrop { .. } => "Crop canvas",
+            Command::CanvasResize { .. } => "Resize canvas",
+            // ===== END raster-edit / canvas tools =====
             _ => "",
         }
     }
