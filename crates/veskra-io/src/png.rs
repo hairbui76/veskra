@@ -1,8 +1,11 @@
 //! PNG exporter (FMT-07) and raster-export helpers shared with the PSD writer.
 //!
 //! # Output format (documented choices)
-//! * Always **RGBA8, straight alpha, non-interlaced** (color type 6). We do not pre-scan the image to
-//!   choose RGB8 for fully opaque documents: that would need a second full composite pass.
+//! * Always **RGBA, straight alpha, non-interlaced** (color type 6), 8 bits per channel by default or
+//!   16 bits with `bit_depth = 16` (big-endian samples, straight values from
+//!   `veskra_color::convert::premul16_to_straight16`, so nothing is quantized to 8 bits on the way).
+//!   We do not pre-scan the image to choose RGB for fully opaque documents: that would need a second
+//!   full composite pass.
 //! * Pixels come from the deterministic CPU compositor (`veskra-compose`), composited in row bands of
 //!   [`BAND_ROWS`] (bounded memory, cancellation checked per band) and converted u16 premultiplied →
 //!   8-bit straight exclusively by `veskra_color::convert::premul16_to_straight8` (no halos: alpha 0
@@ -19,6 +22,13 @@
 //!   Veskra's default transform intent)** plus the spec-recommended `gAMA`/`cHRM` values.
 //! * not embedding, non-sRGB document → pixels converted to sRGB with `RgbTransform` (relative
 //!   colorimetric) and tagged `sRGB`; a `ProfileNotEmbedded` warning reports the conversion.
+//! * `profile = srgb | display_p3 | adobe_rgb` (embedding on): pixels are converted from the document
+//!   space to that target with the **relative colorimetric** intent, in `f64` on the 16-bit
+//!   composite, and the target's ICC bytes are embedded (`iCCP`). When the document already is in the
+//!   target space nothing is converted and the document's own profile bytes are embedded, so an sRGB
+//!   document exported as `srgb` is byte-identical to the default export. Out-of-gamut pixels are
+//!   clipped per channel and **counted** (`ExportReport::out_of_gamut_pixels`, `GamutClipped`
+//!   warning). A wide-gamut target without embedding is rejected (`IncompatibleOutputProfile`).
 //!
 //! # `raster_scale`
 //! Implemented: area-average (box) filter when downscaling, bilinear (pixel-centre aligned, edge
@@ -29,12 +39,14 @@ use crate::{CancelToken, Exporter};
 use miniz_oxide::deflate::core::CompressorOxide;
 use miniz_oxide::inflate::stream::InflateState;
 use miniz_oxide::{DataFormat, MZFlush, MZStatus};
+use std::cell::Cell;
 use std::io::Write;
 use std::sync::Arc;
 use veskra_color::{IccProfile, RenderingIntent, RgbTransform, convert};
 use veskra_compose::ComposeOptions;
 use veskra_core::export::{
-    ExportFormat, ExportOptions, ExportPreflight, ExportReport, ExportWarning, ExportWarningKind, ValidationStatus,
+    ExportFormat, ExportOptions, ExportPreflight, ExportProfile, ExportReport, ExportWarning, ExportWarningKind,
+    ValidationStatus,
 };
 use veskra_core::{BlendSpace, ErrorCode, RectI, VeskraError};
 use veskra_doc::{Document, LayerKind};
@@ -72,11 +84,72 @@ pub(crate) fn document_profile(doc: &Document) -> Result<Arc<IccProfile>, Veskra
 pub(crate) struct ColorPlan {
     /// Profile whose bytes are embedded (`Some` only when embedding).
     pub embed: Option<Arc<IccProfile>>,
-    /// Transform applied to premultiplied pixels before writing (non-sRGB doc, not embedding).
-    pub to_srgb: Option<RgbTransform>,
+    /// Transform applied to premultiplied pixels before writing (document space → written space).
+    pub convert: Option<RgbTransform>,
     /// Human-readable profile semantics for preflight/report.
     pub label: String,
     pub warnings: Vec<ExportWarning>,
+    /// Name of the color space the written values are in.
+    pub target_name: String,
+    /// The conversion can clip (the document gamut is not contained in the target gamut).
+    pub clip_possible: bool,
+    /// Pixels clipped so far by [`ColorPlan::convert_counting`].
+    clipped: Cell<u64>,
+}
+
+impl ColorPlan {
+    /// Convert premultiplied RGBA16 pixels to the written color space (no-op without a transform).
+    pub(crate) fn convert_px(&self, px: &mut [u16]) {
+        if let Some(t) = &self.convert {
+            t.apply_rgba16_premul(px);
+        }
+    }
+
+    /// [`convert_px`](Self::convert_px) that also counts out-of-gamut (clipped) pixels. Used for
+    /// the flattened image only, so layer data never counts a pixel twice.
+    pub(crate) fn convert_counting(&self, px: &mut [u16]) {
+        if let Some(t) = &self.convert {
+            self.clipped.set(self.clipped.get().saturating_add(t.apply_rgba16_premul_counting(px)));
+        }
+    }
+
+    pub(crate) fn clipped(&self) -> u64 {
+        self.clipped.get()
+    }
+
+    /// `"relative-colorimetric"` when pixels are converted.
+    pub(crate) fn intent(&self) -> Option<String> {
+        self.convert.as_ref().map(|t| t.intent().as_str().to_string())
+    }
+
+    /// Warning for the pixels actually clipped during this export (`None` if there were none).
+    pub(crate) fn clip_warning(&self) -> Option<ExportWarning> {
+        gamut_clip_warning(self.clipped(), &self.target_name)
+    }
+}
+
+/// `GamutClipped` warning for `n` clipped pixels (`None` for 0).
+pub(crate) fn gamut_clip_warning(n: u64, target: &str) -> Option<ExportWarning> {
+    (n > 0).then(|| {
+        warning(
+            ExportWarningKind::GamutClipped,
+            format!(
+                "{n} pixel(s) had colors outside '{target}' and were clipped to its gamut (relative colorimetric)."
+            ),
+            None,
+            u32::try_from(n).unwrap_or(u32::MAX),
+        )
+    })
+}
+
+/// The ICC profile of an explicit export target (`None` for `document`).
+pub(crate) fn target_profile(p: ExportProfile) -> Option<Arc<IccProfile>> {
+    match p {
+        ExportProfile::Srgb => Some(IccProfile::srgb()),
+        ExportProfile::DisplayP3 => Some(IccProfile::display_p3()),
+        ExportProfile::AdobeRgb => Some(IccProfile::adobe_rgb_compatible()),
+        _ => None,
+    }
 }
 
 pub(crate) fn color_plan(doc: &Document, opts: &ExportOptions, format: ExportFormat) -> Result<ColorPlan, VeskraError> {
@@ -84,12 +157,55 @@ pub(crate) fn color_plan(doc: &Document, opts: &ExportOptions, format: ExportFor
     let name = profile.id().semantic_name;
     let assumed = if doc.color.assumed { ", assumed" } else { "" };
     let is_srgb = profile.is_srgb_equivalent();
+    // Explicit target: convert unless the document already is in that space (then the plain
+    // "embed the document profile" path below is taken, keeping its bytes identical).
+    if opts.embed_color_profile
+        && let Some(target) = target_profile(opts.profile)
+    {
+        let t = RgbTransform::new(&profile, &target, RenderingIntent::RelativeColorimetric).map_err(|e| {
+            VeskraError::new(ErrorCode::ColorTransformFailure, format!("cannot convert to the target profile: {e}"))
+        })?;
+        if !t.is_identity() {
+            let tname = target.id().semantic_name;
+            let fits = t.source_gamut_fits();
+            let mut warnings = vec![warning(
+                ExportWarningKind::ColorConverted,
+                format!(
+                    "Pixels are converted from '{name}' to '{tname}' (relative colorimetric) and the '{tname}' profile is embedded."
+                ),
+                None,
+                0,
+            )];
+            if !fits {
+                warnings.push(warning(
+                    ExportWarningKind::GamutClipped,
+                    format!(
+                        "'{name}' can hold colors outside '{tname}'; they are clipped to the target gamut and counted in the export report."
+                    ),
+                    None,
+                    0,
+                ));
+            }
+            return Ok(ColorPlan {
+                label: format!("{tname} (embedded, converted from {name}{assumed}, relative colorimetric)"),
+                embed: Some(target),
+                convert: Some(t),
+                warnings,
+                target_name: tname,
+                clip_possible: !fits,
+                clipped: Cell::new(0),
+            });
+        }
+    }
     if opts.embed_color_profile {
         return Ok(ColorPlan {
             label: format!("{name} (embedded{assumed})"),
             embed: Some(profile),
-            to_srgb: None,
+            convert: None,
             warnings: Vec::new(),
+            target_name: name,
+            clip_possible: false,
+            clipped: Cell::new(0),
         });
     }
     let tag = match format {
@@ -108,16 +224,22 @@ pub(crate) fn color_plan(doc: &Document, opts: &ExportOptions, format: ExportFor
         }
         return Ok(ColorPlan {
             embed: None,
-            to_srgb: None,
+            convert: None,
             label: format!("sRGB IEC61966-2.1 values ({tag}, profile not embedded{assumed})"),
             warnings,
+            target_name: veskra_color::icc::SRGB_SEMANTIC_NAME.to_string(),
+            clip_possible: false,
+            clipped: Cell::new(0),
         });
     }
     let t = RgbTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::RelativeColorimetric)
         .map_err(|e| VeskraError::new(ErrorCode::ColorTransformFailure, format!("cannot convert to sRGB: {e}")))?;
     Ok(ColorPlan {
         embed: None,
-        to_srgb: if t.is_identity() { None } else { Some(t) },
+        clip_possible: !t.source_gamut_fits(),
+        convert: if t.is_identity() { None } else { Some(t) },
+        target_name: veskra_color::icc::SRGB_SEMANTIC_NAME.to_string(),
+        clipped: Cell::new(0),
         label: format!("sRGB IEC61966-2.1 values ({tag}, converted from {name}, profile not embedded)"),
         warnings: vec![warning(
             ExportWarningKind::ProfileNotEmbedded,
@@ -139,13 +261,11 @@ pub(crate) fn warning(
     ExportWarning { kind, message: message.into(), layer, count }
 }
 
-/// Composite `rect` of the visible document (premultiplied RGBA16, working space), optionally
-/// converted with `to_srgb`.
-pub(crate) fn composite_band(doc: &Document, rect: RectI, to_srgb: Option<&RgbTransform>) -> Vec<u16> {
+/// Composite `rect` of the visible document (premultiplied RGBA16, working space), converted to
+/// the written color space of `color` (out-of-gamut pixels are counted there).
+pub(crate) fn composite_band(doc: &Document, rect: RectI, color: &ColorPlan) -> Vec<u16> {
     let mut px = veskra_compose::composite_rect(doc, rect, &ComposeOptions::default());
-    if let Some(t) = to_srgb {
-        t.apply_rgba16_premul(&mut px);
-    }
+    color.convert_counting(&mut px);
     px
 }
 
@@ -231,7 +351,7 @@ fn filter_taps(src: u32, dst: u32) -> Vec<Taps> {
 /// the source in bands and keeping only the current band in memory.
 pub(crate) struct ScaledRows<'a> {
     doc: &'a Document,
-    to_srgb: Option<&'a RgbTransform>,
+    color: &'a ColorPlan,
     cancel: &'a CancelToken,
     src_w: u32,
     src_h: u32,
@@ -253,7 +373,7 @@ impl<'a> ScaledRows<'a> {
     pub fn new(
         doc: &'a Document,
         scale: f32,
-        to_srgb: Option<&'a RgbTransform>,
+        color: &'a ColorPlan,
         cancel: &'a CancelToken,
     ) -> Result<Self, VeskraError> {
         let (src_w, src_h) = (doc.width(), doc.height());
@@ -261,7 +381,7 @@ impl<'a> ScaledRows<'a> {
         let identity = out_w == src_w && out_h == src_h;
         let (xt, yt) =
             if identity { (Vec::new(), Vec::new()) } else { (filter_taps(src_w, out_w), filter_taps(src_h, out_h)) };
-        Ok(Self { doc, to_srgb, cancel, src_w, src_h, out_w, out_h, band: None, xt, yt, identity })
+        Ok(Self { doc, color, cancel, src_w, src_h, out_w, out_h, band: None, xt, yt, identity })
     }
 
     fn src_row(&mut self, y: u32) -> Result<&[u16], VeskraError> {
@@ -271,7 +391,7 @@ impl<'a> ScaledRows<'a> {
             let y0 = b * BAND_ROWS;
             let y1 = (y0 + BAND_ROWS).min(self.src_h);
             let r = RectI::new(0, y0 as i32, self.src_w as i32, y1 as i32);
-            self.band = Some((b, composite_band(self.doc, r, self.to_srgb)));
+            self.band = Some((b, composite_band(self.doc, r, self.color)));
         }
         let stride = self.src_w as usize * 4;
         let off = (y % BAND_ROWS) as usize * stride;
@@ -395,16 +515,15 @@ impl<'a> IdatStream<'a> {
 }
 
 /// Filter one row with the minimum-sum-of-absolute-differences heuristic. `out` is `1 + row.len()`.
-fn filter_row(row: &[u8], prev: &[u8], out: &mut Vec<u8>, scratch: &mut [Vec<u8>; 5]) {
-    const BPP: usize = 4;
+fn filter_row(row: &[u8], prev: &[u8], out: &mut Vec<u8>, scratch: &mut [Vec<u8>; 5], bpp: usize) {
     let n = row.len();
     for (f, s) in scratch.iter_mut().enumerate() {
         s.clear();
         s.reserve(n);
         for i in 0..n {
-            let a = if i >= BPP { row[i - BPP] } else { 0 };
+            let a = if i >= bpp { row[i - bpp] } else { 0 };
             let b = prev[i];
-            let c = if i >= BPP { prev[i - BPP] } else { 0 };
+            let c = if i >= bpp { prev[i - bpp] } else { 0 };
             let x = row[i];
             let v = match f {
                 0 => x,
@@ -470,20 +589,26 @@ fn ppm_from_dpi(dpi: f64) -> u32 {
     (dpi / 0.0254).round().clamp(1.0, u32::MAX as f64 / 2.0) as u32
 }
 
-/// Row producer: fills row `y` (`w · 4` straight RGBA8 bytes).
+/// Row producer: fills row `y` (`w · 4` straight RGBA8 bytes, or `w · 8` big-endian RGBA16 bytes).
 type RowFn<'a> = dyn FnMut(u32, &mut [u8]) -> Result<(), VeskraError> + 'a;
 
-/// Write a complete RGBA8 straight-alpha PNG. `icc`: embed this profile (`iCCP`); `None` → `sRGB`
-/// chunk. `rows(y, buf)` fills row `y` (`w · 4` bytes).
+/// Write a complete straight-alpha RGBA PNG with `depth` (8 or 16) bits per channel. `icc`: embed
+/// this profile (`iCCP`); `None` → `sRGB` chunk. `rows(y, buf)` fills row `y` (`w · depth / 2` bytes).
+#[allow(clippy::too_many_arguments)]
 fn write_png(
     out: &mut dyn Write,
     w: u32,
     h: u32,
+    depth: u8,
     icc: Option<&IccProfile>,
     dpi: Option<f64>,
     cancel: &CancelToken,
     rows: &mut RowFn<'_>,
 ) -> Result<(), VeskraError> {
+    if depth != 8 && depth != 16 {
+        return Err(png_err("PNG bit depth must be 8 or 16"));
+    }
+    let bpp = depth as usize / 2;
     if w == 0 || h == 0 || w > i32::MAX as u32 || h > i32::MAX as u32 {
         return Err(png_err("PNG dimensions must be in 1..2^31"));
     }
@@ -491,7 +616,7 @@ fn write_png(
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&w.to_be_bytes());
     ihdr.extend_from_slice(&h.to_be_bytes());
-    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // depth 8, RGBA, deflate, adaptive filter, no interlace
+    ihdr.extend_from_slice(&[depth, 6, 0, 0, 0]); // depth, RGBA, deflate, adaptive filter, no interlace
     write_chunk(out, b"IHDR", &ihdr)?;
     let srgb_fallback = |out: &mut dyn Write| -> Result<(), VeskraError> {
         let mut chrm = Vec::with_capacity(32);
@@ -525,7 +650,7 @@ fn write_png(
         phys.push(1);
         write_chunk(out, b"pHYs", &phys)?;
     }
-    let stride = w as usize * 4;
+    let stride = w as usize * bpp;
     let mut row8 = vec![0u8; stride];
     let mut prev = vec![0u8; stride];
     let mut filtered = Vec::with_capacity(stride + 1);
@@ -537,7 +662,7 @@ fn write_png(
                 cancel.check()?;
             }
             rows(y, &mut row8)?;
-            filter_row(&row8, &prev, &mut filtered, &mut scratch);
+            filter_row(&row8, &prev, &mut filtered, &mut scratch, bpp);
             idat.feed(&filtered, MZFlush::None)?;
             std::mem::swap(&mut prev, &mut row8);
         }
@@ -558,7 +683,7 @@ pub fn encode_rgba8_srgb(width: u32, height: u32, rgba_straight: &[u8]) -> Resul
         return Err(VeskraError::invalid("pixel buffer length must be width * height * 4"));
     }
     let mut out = Vec::with_capacity(len / 2 + 256);
-    write_png(&mut out, width, height, None, None, &CancelToken::new(), &mut |y, row| {
+    write_png(&mut out, width, height, 8, None, None, &CancelToken::new(), &mut |y, row| {
         let o = y as usize * stride;
         row.copy_from_slice(&rgba_straight[o..o + stride]);
         Ok(())
@@ -627,6 +752,10 @@ impl Exporter for PngExporter {
             height_px: doc.height(),
             estimated_bytes: 0,
             warnings: Vec::new(),
+            target_profile: String::new(),
+            bit_depth: opts.bit_depth,
+            rendering_intent: None,
+            gamut_clipping_possible: false,
         };
         if let Err(e) = opts.validate(self.format()) {
             pf.blocked_reason = Some(e.message);
@@ -636,8 +765,8 @@ impl Exporter for PngExporter {
             Ok((w, h)) => {
                 pf.width_px = w;
                 pf.height_px = h;
-                // Upper-bound-ish estimate: raw RGBA8 + filter bytes (real files are usually smaller).
-                pf.estimated_bytes = (w as u64 * 4 + 1) * h as u64 + 1024;
+                // Upper-bound-ish estimate: raw RGBA + filter bytes (real files are usually smaller).
+                pf.estimated_bytes = (w as u64 * (opts.bit_depth as u64 / 2) + 1) * h as u64 + 1024;
             }
             Err(e) => {
                 pf.blocked_reason = Some(e.message);
@@ -646,11 +775,14 @@ impl Exporter for PngExporter {
         }
         match color_plan(doc, opts, self.format()) {
             Ok(cp) => {
-                pf.profile = cp.label;
-                pf.warnings.extend(cp.warnings);
+                pf.target_profile = cp.target_name.clone();
+                pf.rendering_intent = cp.intent();
+                pf.gamut_clipping_possible = cp.clip_possible;
                 if let Some(p) = &cp.embed {
                     pf.estimated_bytes += p.bytes().len() as u64;
                 }
+                pf.profile = cp.label;
+                pf.warnings.extend(cp.warnings);
             }
             Err(e) => pf.blocked_reason = Some(e.message),
         }
@@ -679,24 +811,39 @@ impl Exporter for PngExporter {
         opts.validate(self.format())?;
         cancel.check()?;
         let cp = color_plan(doc, opts, self.format())?;
-        let mut rows = ScaledRows::new(doc, opts.raster_scale, cp.to_srgb.as_ref(), cancel)?;
+        let mut rows = ScaledRows::new(doc, opts.raster_scale, &cp, cancel)?;
         let (w, h) = (rows.out_w, rows.out_h);
         let dpi = doc.dpi as f64 * (w as f64 / doc.width() as f64);
         let mut counter = CountingWriter { inner: out, n: 0 };
         let mut row16 = vec![0u16; w as usize * 4];
-        write_png(&mut counter, w, h, cp.embed.as_deref(), Some(dpi), cancel, &mut |y, row8| {
+        let deep = opts.bit_depth == 16;
+        let mut straight16 = vec![0u16; if deep { w as usize * 4 } else { 0 }];
+        write_png(&mut counter, w, h, opts.bit_depth, cp.embed.as_deref(), Some(dpi), cancel, &mut |y, row| {
             rows.row(y, &mut row16)?;
-            convert::premul16_to_straight8(&row16, row8);
+            if deep {
+                convert::premul16_to_straight16(&row16, &mut straight16);
+                for (d, v) in row.chunks_exact_mut(2).zip(straight16.iter()) {
+                    d.copy_from_slice(&v.to_be_bytes());
+                }
+            } else {
+                convert::premul16_to_straight8(&row16, row);
+            }
             Ok(())
         })?;
+        drop(rows);
 
         let (mut warnings, flattened, vectors) = Self::common_warnings(doc);
-        let mut all = cp.warnings;
+        let mut all = cp.warnings.clone();
+        all.extend(cp.clip_warning());
         all.append(&mut warnings);
         Ok(ExportReport {
             success: false, // set by export_to_path after flush + validation (MASTER_PLAN §7.6)
             file_uri: None,
             format: self.format(),
+            target_profile: cp.target_name.clone(),
+            bit_depth: opts.bit_depth,
+            rendering_intent: cp.intent(),
+            out_of_gamut_pixels: cp.clipped(),
             profile: cp.label,
             profile_embedded: cp.embed.is_some(),
             vector_object_count: 0,
@@ -742,6 +889,8 @@ pub struct PngInfo {
     pub width: u32,
     pub height: u32,
     pub color_type: u8,
+    /// Bits per channel (8 or 16).
+    pub bit_depth: u8,
     /// Chunk types in file order.
     pub chunks: Vec<[u8; 4]>,
     /// Decompressed `iCCP` profile (name, bytes).
@@ -760,8 +909,16 @@ pub fn inspect_png(bytes: &[u8]) -> Result<PngInfo, VeskraError> {
         return Err(bad("signature"));
     }
     let mut pos = 8usize;
-    let mut info =
-        PngInfo { width: 0, height: 0, color_type: 0, chunks: Vec::new(), icc: None, srgb_intent: None, ppm: None };
+    let mut info = PngInfo {
+        width: 0,
+        height: 0,
+        color_type: 0,
+        bit_depth: 0,
+        chunks: Vec::new(),
+        icc: None,
+        srgb_intent: None,
+        ppm: None,
+    };
     let mut idat: Vec<&[u8]> = Vec::new();
     let mut idat_done = false;
     let mut seen_iend = false;
@@ -806,10 +963,12 @@ pub fn inspect_png(bytes: &[u8]) -> Result<PngInfo, VeskraError> {
                     return Err(bad("dimensions"));
                 }
                 info.color_type = data[9];
+                info.bit_depth = data[8];
                 bpp = match (data[8], data[9]) {
                     (8, 6) => 4,
                     (8, 2) => 3,
-                    _ => return Err(bad("unsupported depth/color type (writer emits 8-bit RGB/RGBA)")),
+                    (16, 6) => 8,
+                    _ => return Err(bad("unsupported depth/color type (writer emits 8-bit RGB/RGBA or 16-bit RGBA)")),
                 };
                 if data[10] != 0 || data[11] != 0 || data[12] != 0 {
                     return Err(bad("compression/filter/interlace method"));

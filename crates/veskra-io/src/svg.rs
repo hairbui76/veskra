@@ -20,14 +20,17 @@
 //!   profile is not sRGB; warned).
 //! * SVG has no portable whole-document ICC semantics: with `embed_color_profile` only the
 //!   embedded PNGs carry the profile; vector colors are plain sRGB values (MASTER_PLAN §2.3).
+//! * `profile = display_p3 | adobe_rgb`: the embedded PNGs are converted to and tagged with that
+//!   profile (relative colorimetric); path fills **stay sRGB values** because SVG 1.1 cannot attach
+//!   an ICC profile to a fill portably. This is reported (`VectorColorsSrgb` warning, profile
+//!   label). `bit_depth = 16` is not available: images are 8-bit (`BitDepthReduced` warning).
 
 mod png;
 pub(crate) mod xml;
 
-use crate::plan::{HybridStrategy, IllustratorPlan, SrgbOut, VecNode, VisibleItem, render_run, stroke_alpha};
+use crate::plan::{ColorOut, HybridStrategy, IllustratorPlan, VecNode, VisibleItem, render_run, stroke_alpha};
 use crate::{CancelToken, Exporter};
 use std::io::Write;
-use veskra_color::IccProfile;
 use veskra_core::export::{ExportFormat, ExportOptions, ExportPreflight, ExportReport, ValidationStatus};
 use veskra_core::{BlendMode, ErrorCode, LayerId, VeskraError};
 use veskra_doc::Document;
@@ -137,7 +140,7 @@ fn opacity_blend_attrs(opacity: f32, blend: BlendMode) -> String {
 struct Writer<'a> {
     doc: &'a Document,
     plan: &'a IllustratorPlan,
-    color: SrgbOut,
+    color: ColorOut,
     out: String,
     paths: u32,
     images: u32,
@@ -153,7 +156,7 @@ impl Writer<'_> {
             if g.outline.is_empty() {
                 continue;
             }
-            let hex = hex_color(self.color.color(rec.color));
+            let hex = hex_color(self.color.srgb_color(rec.color));
             self.out.push_str(&format!(
                 "<path d=\"{}\" fill=\"{hex}\" fill-opacity=\"{}\" fill-rule=\"nonzero\"/>\n",
                 g.outline.to_svg_d(PATH_DECIMALS),
@@ -205,8 +208,8 @@ impl Writer<'_> {
 
     fn image(&mut self, k: usize, layers: &[LayerId], cancel: &CancelToken) -> Result<(), VeskraError> {
         let Some(img) = render_run(self.doc, layers, &self.color, cancel)? else { return Ok(()) };
-        let srgb = IccProfile::srgb();
-        let icc = self.plan.options.embed_color_profile.then(|| (srgb.description(), srgb.bytes()));
+        let target = self.color.target.clone();
+        let icc = self.plan.options.embed_color_profile.then(|| (target.description(), target.bytes()));
         let png = png::encode_rgba8(img.rect.width(), img.rect.height(), &img.rgba, icc)?;
         let mut names: Vec<String> =
             layers.iter().take(8).map(|l| self.plan.get(*l).map(|p| p.name.clone()).unwrap_or_default()).collect();
@@ -229,14 +232,14 @@ impl Writer<'_> {
     }
 }
 
-/// Serialize the plan as SVG. Returns (svg text, paths written, images written).
+/// Serialize the plan as SVG. Returns (svg text, paths written, images written, color conversion state).
 pub(crate) fn write_svg(
     doc: &Document,
     plan: &IllustratorPlan,
     cancel: &CancelToken,
-) -> Result<(String, u32, u32), VeskraError> {
+) -> Result<(String, u32, u32, ColorOut), VeskraError> {
     let (w, h) = (doc.width(), doc.height());
-    let mut wr = Writer { doc, plan, color: SrgbOut::new(doc, plan), out: String::new(), paths: 0, images: 0 };
+    let mut wr = Writer { doc, plan, color: ColorOut::new(doc, plan), out: String::new(), paths: 0, images: 0 };
     wr.out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n");
     wr.out.push_str("<!-- Exported by Veskra: Export for Illustrator (SVG 1.1). This is not a native Adobe Illustrator (.ai) file. -->\n");
     wr.out.push_str(&format!(
@@ -302,7 +305,7 @@ pub(crate) fn write_svg(
         wr.out.push_str("</g>\n");
     }
     wr.out.push_str("</svg>\n");
-    Ok((wr.out, wr.paths, wr.images))
+    Ok((wr.out, wr.paths, wr.images, wr.color))
 }
 
 impl Exporter for SvgExporter {
@@ -326,7 +329,10 @@ impl Exporter for SvgExporter {
         if let Some(reason) = &plan.blocked_reason {
             return Err(VeskraError::new(ErrorCode::InvalidArgument, reason.clone()));
         }
-        let (svg, paths, images) = write_svg(doc, &plan, cancel)?;
+        let (svg, paths, images, color) = write_svg(doc, &plan, cancel)?;
+        let mut warnings = plan.warnings.clone();
+        warnings.extend(plan.color_warnings(doc, ExportFormat::Svg));
+        warnings.extend(color.clip_warnings());
         cancel.check()?;
         out.write_all(svg.as_bytes())
             .and_then(|_| out.flush())
@@ -340,7 +346,11 @@ impl Exporter for SvgExporter {
             vector_object_count: paths,
             rasterized_object_count: images,
             flattened_feature_list: plan.flattened_features(),
-            warnings: plan.warnings.clone(),
+            warnings,
+            target_profile: color.target.id().semantic_name,
+            bit_depth: 8,
+            rendering_intent: color.intent(ExportFormat::Svg),
+            out_of_gamut_pixels: color.clipped_pixels(),
             duration_ms: start.elapsed().as_millis() as u64,
             file_bytes: svg.len() as u64,
             width_px: doc.width(),

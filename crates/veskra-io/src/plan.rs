@@ -23,7 +23,9 @@
 //! | off, on | one raster run of all layers; vectors omitted (warned) | same |
 //! | off, off | blocked (ILL-004) | blocked |
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use crate::CancelToken;
 use veskra_color::{IccProfile, RenderingIntent, RgbTransform, convert};
@@ -599,7 +601,8 @@ impl IllustratorPlan {
                 0,
             ));
         }
-        if !self.doc_is_srgb {
+        // Wide-gamut targets report their (format-specific) conversions in `color_warnings`.
+        if !self.doc_is_srgb && !opts.profile.requires_embedding() {
             w.push(warn(
                 ExportWarningKind::Other,
                 format!(
@@ -631,10 +634,91 @@ impl IllustratorPlan {
         self.items.iter().any(|i| matches!(i, VisibleItem::Vectors { .. }))
     }
 
+    /// ICC profile the raster images (and, in PDF, the vector colors) are written in: sRGB unless
+    /// a wide-gamut target was chosen (`document` means sRGB for the Illustrator formats).
+    pub fn target_icc(&self) -> Arc<IccProfile> {
+        crate::png::target_profile(self.options.profile).unwrap_or_else(IccProfile::srgb)
+    }
+
+    /// Format-specific color warnings for the chosen target profile / bit depth: what is
+    /// converted, what cannot be carried (SVG vector fills stay sRGB) and whether clipping can
+    /// occur. Empty for the default options on an sRGB document.
+    pub fn color_warnings(&self, doc: &Document, format: ExportFormat) -> Vec<ExportWarning> {
+        let mut w = Vec::new();
+        if self.blocked_reason.is_some() {
+            return w;
+        }
+        let fmt = if format == ExportFormat::Svg { "SVG" } else { "PDF" };
+        if self.options.bit_depth == 16 {
+            w.push(warn(
+                ExportWarningKind::BitDepthReduced,
+                format!("16-bit output exists for PNG and PSD only; images in this {fmt} are written with 8 bits per channel."),
+                None,
+                0,
+            ));
+        }
+        if !self.options.profile.requires_embedding() {
+            return w;
+        }
+        let color = ColorOut::new(doc, self);
+        let t = color.target.id().semantic_name;
+        if color.to_target.is_some() {
+            let what =
+                if format == ExportFormat::Svg { "Raster images are" } else { "Raster images and vector colors are" };
+            w.push(warn(
+                ExportWarningKind::ColorConverted,
+                format!(
+                    "{what} converted from '{}' to '{t}' (relative colorimetric) and tagged with the '{t}' profile.",
+                    self.doc_profile
+                ),
+                None,
+                0,
+            ));
+        }
+        if format == ExportFormat::Svg {
+            w.push(warn(
+                ExportWarningKind::VectorColorsSrgb,
+                format!(
+                    "SVG cannot attach an ICC profile to vector fills: the colors of the {} editable path(s) stay sRGB values; only the embedded raster images are in '{t}'.",
+                    self.vector_path_count
+                ),
+                None,
+                self.vector_path_count,
+            ));
+            if !self.doc_is_srgb {
+                w.push(warn(
+                    ExportWarningKind::Other,
+                    format!("Vector fill colors are converted from the document profile '{}' to sRGB (relative colorimetric).", self.doc_profile),
+                    None,
+                    0,
+                ));
+            }
+        }
+        if color.clip_possible() {
+            w.push(warn(
+                ExportWarningKind::GamutClipped,
+                format!(
+                    "'{}' can hold colors outside the export gamut; they are clipped and counted in the export report.",
+                    self.doc_profile
+                ),
+                None,
+                0,
+            ));
+        }
+        w
+    }
+
     /// Profile semantics string for preflight/report (truthful per format, ILL-005).
     pub fn profile_label(&self, format: ExportFormat) -> String {
         if !self.options.embed_color_profile {
             return "sRGB values, profile not embedded".into();
+        }
+        if self.options.profile.requires_embedding() {
+            let t = self.target_icc().id().semantic_name;
+            return match format {
+                ExportFormat::Pdf => format!("{t} (embedded ICCBased color space for images and vector colors)"),
+                _ => format!("{t} (ICC embedded in raster images; vector colors are sRGB values)"),
+            };
         }
         match format {
             ExportFormat::Pdf => "sRGB IEC61966-2.1 (embedded ICCBased color space)".into(),
@@ -662,7 +746,7 @@ impl IllustratorPlan {
                 let raw = r.area() * 4 * 2 / 5;
                 n += if format == ExportFormat::Svg { raw * 4 / 3 } else { raw };
                 if self.options.embed_color_profile {
-                    n += IccProfile::srgb().bytes().len() as u64;
+                    n += self.target_icc().bytes().len() as u64;
                 }
             }
         }
@@ -672,7 +756,14 @@ impl IllustratorPlan {
     /// Preflight for `format` (SVG or PDF) derived from this plan.
     pub fn to_preflight(&self, doc: &Document, format: ExportFormat) -> ExportPreflight {
         let blocked = self.blocked_reason.is_some();
+        let mut warnings = self.warnings.clone();
+        warnings.extend(self.color_warnings(doc, format));
+        let color = (!blocked).then(|| ColorOut::new(doc, self));
         ExportPreflight {
+            target_profile: self.target_icc().id().semantic_name,
+            bit_depth: 8,
+            rendering_intent: color.as_ref().and_then(|c| c.intent(format)),
+            gamut_clipping_possible: color.as_ref().is_some_and(|c| c.clip_possible()),
             format,
             options: self.options,
             blocked_reason: self.blocked_reason.clone(),
@@ -683,7 +774,7 @@ impl IllustratorPlan {
             width_px: doc.width(),
             height_px: doc.height(),
             estimated_bytes: if blocked { 0 } else { self.estimate_bytes(doc, format) },
-            warnings: self.warnings.clone(),
+            warnings,
         }
     }
 
@@ -811,43 +902,105 @@ pub(crate) fn run_bounds(doc: &Document, layers: &[LayerId]) -> RectI {
     r.intersect(&doc.bounds())
 }
 
-/// sRGB output conversion for colors and pixels (identity for sRGB documents).
-pub(crate) struct SrgbOut {
-    transform: Option<RgbTransform>,
+/// Output color conversion for colors and pixels: document → sRGB (vector fills in SVG, and
+/// everything for the default sRGB target) and document → target profile (raster images, and
+/// PDF vector colors). Both are identity (`None`) when the document already is in that space.
+/// Counts the pixels / fill colors that were outside the gamut and clipped.
+pub(crate) struct ColorOut {
+    to_srgb: Option<RgbTransform>,
+    to_target: Option<RgbTransform>,
+    /// Profile of the raster images (and PDF vector colors).
+    pub(crate) target: Arc<IccProfile>,
+    clipped_pixels: Cell<u64>,
+    clipped_colors: Cell<u32>,
 }
 
-impl std::fmt::Debug for SrgbOut {
+impl std::fmt::Debug for ColorOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SrgbOut").field("converts", &self.transform.is_some()).finish()
+        f.debug_struct("ColorOut")
+            .field("to_srgb", &self.to_srgb.is_some())
+            .field("to_target", &self.to_target.is_some())
+            .finish()
     }
 }
 
-impl SrgbOut {
-    pub(crate) fn new(doc: &Document, plan: &IllustratorPlan) -> SrgbOut {
-        if plan.doc_is_srgb {
-            return SrgbOut { transform: None };
-        }
-        let t = IccProfile::parse(&doc.color.icc_bytes)
-            .ok()
-            .and_then(|p| RgbTransform::new(&p, &IccProfile::srgb(), RenderingIntent::RelativeColorimetric).ok())
-            .filter(|t| !t.is_identity());
-        SrgbOut { transform: t }
+impl ColorOut {
+    pub(crate) fn new(doc: &Document, plan: &IllustratorPlan) -> ColorOut {
+        let target = plan.target_icc();
+        let doc_profile = IccProfile::parse(&doc.color.icc_bytes).ok();
+        let to = |dst: &IccProfile| {
+            doc_profile
+                .as_ref()
+                .and_then(|p| RgbTransform::new(p, dst, RenderingIntent::RelativeColorimetric).ok())
+                .filter(|t| !t.is_identity())
+        };
+        let to_srgb = if plan.doc_is_srgb { None } else { to(&IccProfile::srgb()) };
+        let to_target = if plan.options.profile.requires_embedding() { to(&target) } else { to_srgb.clone() };
+        ColorOut { to_srgb, to_target, target, clipped_pixels: Cell::new(0), clipped_colors: Cell::new(0) }
     }
 
-    /// Straight sRGB components of a document color.
-    pub(crate) fn color(&self, c: ColorRgba) -> [f32; 3] {
+    fn convert_color(&self, t: &Option<RgbTransform>, c: ColorRgba) -> [f32; 3] {
         let rgb = [c.r, c.g, c.b];
-        let v = match &self.transform {
-            Some(t) => t.apply(rgb),
+        let v = match t {
+            Some(t) => {
+                let (v, clipped) = t.apply_f64_checked(rgb.map(|x| x as f64));
+                if clipped {
+                    self.clipped_colors.set(self.clipped_colors.get().saturating_add(1));
+                }
+                v.map(|x| x as f32)
+            }
             None => rgb,
         };
         v.map(|x| if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 })
     }
 
+    /// Straight sRGB components of a document color (SVG fills).
+    pub(crate) fn srgb_color(&self, c: ColorRgba) -> [f32; 3] {
+        self.convert_color(&self.to_srgb, c)
+    }
+
+    /// Straight components of a document color in the target profile (PDF fills).
+    pub(crate) fn target_color(&self, c: ColorRgba) -> [f32; 3] {
+        self.convert_color(&self.to_target, c)
+    }
+
     fn pixels(&self, px: &mut [u16]) {
-        if let Some(t) = &self.transform {
-            t.apply_rgba16_premul(px);
+        if let Some(t) = &self.to_target {
+            self.clipped_pixels.set(self.clipped_pixels.get().saturating_add(t.apply_rgba16_premul_counting(px)));
         }
+    }
+
+    /// Raster pixels clipped so far.
+    pub(crate) fn clipped_pixels(&self) -> u64 {
+        self.clipped_pixels.get()
+    }
+
+    /// Whether the document gamut exceeds the gamut(s) written for `format`-independent raster
+    /// data or (for sRGB fills) vector colors.
+    pub(crate) fn clip_possible(&self) -> bool {
+        [&self.to_target, &self.to_srgb].iter().any(|t| t.as_ref().is_some_and(|t| !t.source_gamut_fits()))
+    }
+
+    /// `"relative-colorimetric"` when anything is converted for `format`.
+    pub(crate) fn intent(&self, format: ExportFormat) -> Option<String> {
+        let converts = self.to_target.is_some() || (format == ExportFormat::Svg && self.to_srgb.is_some());
+        converts.then(|| RenderingIntent::RelativeColorimetric.as_str().to_string())
+    }
+
+    /// Warnings about what was actually clipped during the export.
+    pub(crate) fn clip_warnings(&self) -> Vec<ExportWarning> {
+        let mut w = Vec::new();
+        w.extend(crate::png::gamut_clip_warning(self.clipped_pixels(), &self.target.id().semantic_name));
+        let n = self.clipped_colors.get();
+        if n > 0 {
+            w.push(warn(
+                ExportWarningKind::GamutClipped,
+                format!("{n} vector fill color(s) were outside the export gamut and were clipped."),
+                None,
+                n,
+            ));
+        }
+        w
     }
 }
 
@@ -866,11 +1019,11 @@ impl RunImage {
 }
 
 /// Composite the leaves of a run (reference compositor, `layer_filter`), convert to straight
-/// sRGB RGBA8 and crop. `None` if fully transparent.
+/// RGBA8 in the target profile (sRGB by default) and crop. `None` if fully transparent.
 pub(crate) fn render_run(
     doc: &Document,
     layers: &[LayerId],
-    color: &SrgbOut,
+    color: &ColorOut,
     cancel: &CancelToken,
 ) -> Result<Option<RunImage>, VeskraError> {
     let bounds = run_bounds(doc, layers);

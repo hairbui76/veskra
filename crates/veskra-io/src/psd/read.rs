@@ -4,7 +4,9 @@
 //! mask information incl. every layer record, tagged block and channel image data, global layer
 //! mask info, merged image data) and decodes every RLE row to its exact width. It shares no code
 //! with the writer except the PackBits row decoder's counterpart (which has its own unit tests).
-//! Scope: version-1 PSD, 8-bit, RGB — the subset the writer emits.
+//! Scope: version-1 PSD, RGB, 8 or 16 bits per channel (16-bit layer info in an `Lr16` block) —
+//! the subset the writer emits. For 16-bit files every decoded plane holds two big-endian bytes
+//! per sample.
 
 use super::packbits;
 use veskra_core::{ErrorCode, RectI, VeskraError};
@@ -161,6 +163,147 @@ fn read_pascal(c: &mut Cur, pad: usize, w: &str) -> Result<String, VeskraError> 
     Ok(s.iter().map(|&b| b as char).collect())
 }
 
+/// Parse layer records and their channel image data (`bps` = bytes per sample). Returns the raw
+/// signed layer count and the layers in file order.
+fn parse_layer_info(li: &mut Cur, bps: usize, keep_pixels: bool) -> Result<(i16, Vec<PsdLayerInfo>), VeskraError> {
+    let mut layers: Vec<PsdLayerInfo> = Vec::new();
+    let layer_count_raw = li.u16("layer count")? as i16;
+    let n = layer_count_raw.unsigned_abs() as usize;
+    let mut chan_lens: Vec<Vec<(i16, u32)>> = Vec::with_capacity(n);
+    for _ in 0..n {
+        let rect = read_rect(li, "layer rect")?;
+        let nch = li.u16("channel count")? as usize;
+        if nch > 56 {
+            return Err(bad("layer channel count"));
+        }
+        let mut ch = Vec::with_capacity(nch);
+        for _ in 0..nch {
+            let id = li.u16("channel id")? as i16;
+            if !(-3..=55).contains(&id) {
+                return Err(bad("channel id"));
+            }
+            ch.push((id, li.u32("channel length")?));
+        }
+        if &li.sig("blend signature")? != b"8BIM" {
+            return Err(bad("blend mode signature"));
+        }
+        let blend_key = li.sig("blend key")?;
+        let opacity = li.u8("opacity")?;
+        let clipping = li.u8("clipping")?;
+        if clipping > 1 {
+            return Err(bad("clipping byte"));
+        }
+        let flags = li.u8("flags")?;
+        li.u8("filler")?;
+        let extra_len = li.u32("extra data length")? as usize;
+        let mut ex = Cur { b: li.take(extra_len, "layer extra data")?, p: 0 };
+        let mask_len = ex.u32("mask data length")? as usize;
+        let mut mk = Cur { b: ex.take(mask_len, "mask data")?, p: 0 };
+        let mask = if mask_len == 0 {
+            None
+        } else {
+            if !matches!(mask_len, 20 | 36) {
+                return Err(bad("mask data length"));
+            }
+            let r = read_rect(&mut mk, "mask rect")?;
+            let def = mk.u8("mask default")?;
+            if def != 0 && def != 255 {
+                return Err(bad("mask default color"));
+            }
+            Some((r, def, mk.u8("mask flags")?))
+        };
+        let br_len = ex.u32("blending ranges length")? as usize;
+        if !br_len.is_multiple_of(8) {
+            return Err(bad("blending ranges length"));
+        }
+        ex.take(br_len, "blending ranges")?;
+        let name = read_pascal(&mut ex, 4, "layer name")?;
+        let mut info = PsdLayerInfo {
+            rect,
+            name,
+            unicode_name: None,
+            blend_key,
+            opacity,
+            clipping,
+            flags,
+            channels: Vec::new(),
+            mask,
+            section: None,
+            protection: None,
+            planes: Vec::new(),
+        };
+        while ex.rest() > 0 {
+            let sig = ex.sig("tagged block signature")?;
+            if &sig != b"8BIM" && &sig != b"8B64" {
+                return Err(bad("tagged block signature"));
+            }
+            let key = ex.sig("tagged block key")?;
+            let len = ex.u32("tagged block length")? as usize;
+            let mut d = Cur { b: ex.take(len, "tagged block data")?, p: 0 };
+            match &key {
+                b"luni" => {
+                    let n = d.u32("luni length")? as usize;
+                    let units: Vec<u16> = (0..n).map(|_| d.u16("luni char")).collect::<Result<_, _>>()?;
+                    info.unicode_name = Some(String::from_utf16(&units).map_err(|_| bad("luni is not valid UTF-16"))?);
+                }
+                b"lsct" => {
+                    let t = d.u32("lsct type")?;
+                    if t > 3 {
+                        return Err(bad("lsct type"));
+                    }
+                    let key = if len >= 12 {
+                        if &d.sig("lsct signature")? != b"8BIM" {
+                            return Err(bad("lsct signature"));
+                        }
+                        Some(d.sig("lsct key")?)
+                    } else {
+                        None
+                    };
+                    info.section = Some((t, key));
+                }
+                b"lspf" => info.protection = Some(d.u32("lspf")?),
+                _ => {}
+            }
+        }
+        chan_lens.push(ch);
+        layers.push(info);
+    }
+    // Channel image data, same order as the records.
+    for (info, ch) in layers.iter_mut().zip(&chan_lens) {
+        for &(id, len) in ch {
+            let data = li.take(len as usize, "channel image data")?;
+            let mut cd = Cur { b: data, p: 0 };
+            let comp = cd.u16("channel compression")?;
+            let r = if id == -2 {
+                info.mask.map(|m| m.0).ok_or_else(|| bad("mask channel without mask data"))?
+            } else {
+                info.rect
+            };
+            let plane = read_plane(&data[2..], comp, r.width() as usize * bps, r.height() as usize, keep_pixels)?;
+            info.channels.push((id, comp));
+            if keep_pixels {
+                info.planes.push((id, plane));
+            }
+        }
+    }
+    if li.b[li.p..].iter().any(|&b| b != 0) {
+        return Err(bad("unexpected bytes after channel image data"));
+    }
+    // Group nesting: bounding divider (3) opens, folder record (1/2) closes (bottom → top).
+    let mut depth = 0usize;
+    for l in &layers {
+        match l.section {
+            Some((3, _)) => depth += 1,
+            Some((1 | 2, _)) => depth = depth.checked_sub(1).ok_or_else(|| bad("unbalanced group"))?,
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return Err(bad("unbalanced group dividers"));
+    }
+    Ok((layer_count_raw, layers))
+}
+
 /// Parse and structurally validate a PSD. With `keep_pixels`, decoded planes are returned.
 pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraError> {
     let mut c = Cur { b: bytes, p: 0 };
@@ -184,9 +327,10 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
     if !(1..=30_000).contains(&width) || !(1..=30_000).contains(&height) {
         return Err(bad("dimensions"));
     }
-    if depth != 8 || color_mode != 3 || channels < 3 {
-        return Err(bad("only 8-bit RGB is produced by Veskra"));
+    if !matches!(depth, 8 | 16) || color_mode != 3 || channels < 3 {
+        return Err(bad("only 8-bit and 16-bit RGB are produced by Veskra"));
     }
+    let bps = depth as usize / 8;
     let cm_len = c.u32("color mode data")? as usize;
     c.take(cm_len, "color mode data")?;
 
@@ -218,141 +362,10 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
         let li_len = lm.u32("layer info length")? as usize;
         let mut li = Cur { b: lm.take(li_len, "layer info")?, p: 0 };
         if li_len > 0 {
-            layer_count_raw = li.u16("layer count")? as i16;
-            let n = layer_count_raw.unsigned_abs() as usize;
-            let mut chan_lens: Vec<Vec<(i16, u32)>> = Vec::with_capacity(n);
-            for _ in 0..n {
-                let rect = read_rect(&mut li, "layer rect")?;
-                let nch = li.u16("channel count")? as usize;
-                if nch > 56 {
-                    return Err(bad("layer channel count"));
-                }
-                let mut ch = Vec::with_capacity(nch);
-                for _ in 0..nch {
-                    let id = li.u16("channel id")? as i16;
-                    if !(-3..=55).contains(&id) {
-                        return Err(bad("channel id"));
-                    }
-                    ch.push((id, li.u32("channel length")?));
-                }
-                if &li.sig("blend signature")? != b"8BIM" {
-                    return Err(bad("blend mode signature"));
-                }
-                let blend_key = li.sig("blend key")?;
-                let opacity = li.u8("opacity")?;
-                let clipping = li.u8("clipping")?;
-                if clipping > 1 {
-                    return Err(bad("clipping byte"));
-                }
-                let flags = li.u8("flags")?;
-                li.u8("filler")?;
-                let extra_len = li.u32("extra data length")? as usize;
-                let mut ex = Cur { b: li.take(extra_len, "layer extra data")?, p: 0 };
-                let mask_len = ex.u32("mask data length")? as usize;
-                let mut mk = Cur { b: ex.take(mask_len, "mask data")?, p: 0 };
-                let mask = if mask_len == 0 {
-                    None
-                } else {
-                    if !matches!(mask_len, 20 | 36) {
-                        return Err(bad("mask data length"));
-                    }
-                    let r = read_rect(&mut mk, "mask rect")?;
-                    let def = mk.u8("mask default")?;
-                    if def != 0 && def != 255 {
-                        return Err(bad("mask default color"));
-                    }
-                    Some((r, def, mk.u8("mask flags")?))
-                };
-                let br_len = ex.u32("blending ranges length")? as usize;
-                if !br_len.is_multiple_of(8) {
-                    return Err(bad("blending ranges length"));
-                }
-                ex.take(br_len, "blending ranges")?;
-                let name = read_pascal(&mut ex, 4, "layer name")?;
-                let mut info = PsdLayerInfo {
-                    rect,
-                    name,
-                    unicode_name: None,
-                    blend_key,
-                    opacity,
-                    clipping,
-                    flags,
-                    channels: Vec::new(),
-                    mask,
-                    section: None,
-                    protection: None,
-                    planes: Vec::new(),
-                };
-                while ex.rest() > 0 {
-                    let sig = ex.sig("tagged block signature")?;
-                    if &sig != b"8BIM" && &sig != b"8B64" {
-                        return Err(bad("tagged block signature"));
-                    }
-                    let key = ex.sig("tagged block key")?;
-                    let len = ex.u32("tagged block length")? as usize;
-                    let mut d = Cur { b: ex.take(len, "tagged block data")?, p: 0 };
-                    match &key {
-                        b"luni" => {
-                            let n = d.u32("luni length")? as usize;
-                            let units: Vec<u16> = (0..n).map(|_| d.u16("luni char")).collect::<Result<_, _>>()?;
-                            info.unicode_name =
-                                Some(String::from_utf16(&units).map_err(|_| bad("luni is not valid UTF-16"))?);
-                        }
-                        b"lsct" => {
-                            let t = d.u32("lsct type")?;
-                            if t > 3 {
-                                return Err(bad("lsct type"));
-                            }
-                            let key = if len >= 12 {
-                                if &d.sig("lsct signature")? != b"8BIM" {
-                                    return Err(bad("lsct signature"));
-                                }
-                                Some(d.sig("lsct key")?)
-                            } else {
-                                None
-                            };
-                            info.section = Some((t, key));
-                        }
-                        b"lspf" => info.protection = Some(d.u32("lspf")?),
-                        _ => {}
-                    }
-                }
-                chan_lens.push(ch);
-                layers.push(info);
+            if depth != 8 {
+                return Err(bad("16-bit layer info must be stored in an Lr16 block"));
             }
-            // Channel image data, same order as the records.
-            for (info, ch) in layers.iter_mut().zip(&chan_lens) {
-                for &(id, len) in ch {
-                    let data = li.take(len as usize, "channel image data")?;
-                    let mut cd = Cur { b: data, p: 0 };
-                    let comp = cd.u16("channel compression")?;
-                    let r = if id == -2 {
-                        info.mask.map(|m| m.0).ok_or_else(|| bad("mask channel without mask data"))?
-                    } else {
-                        info.rect
-                    };
-                    let plane = read_plane(&data[2..], comp, r.width() as usize, r.height() as usize, keep_pixels)?;
-                    info.channels.push((id, comp));
-                    if keep_pixels {
-                        info.planes.push((id, plane));
-                    }
-                }
-            }
-            if li.b[li.p..].iter().any(|&b| b != 0) {
-                return Err(bad("unexpected bytes after channel image data"));
-            }
-            // Group nesting: bounding divider (3) opens, folder record (1/2) closes (bottom → top).
-            let mut depth = 0usize;
-            for l in &layers {
-                match l.section {
-                    Some((3, _)) => depth += 1,
-                    Some((1 | 2, _)) => depth = depth.checked_sub(1).ok_or_else(|| bad("unbalanced group"))?,
-                    _ => {}
-                }
-            }
-            if depth != 0 {
-                return Err(bad("unbalanced group dividers"));
-            }
+            (layer_count_raw, layers) = parse_layer_info(&mut li, 1, keep_pixels)?;
         }
         if lm.rest() > 0 {
             let g = lm.u32("global mask length")? as usize;
@@ -363,16 +376,24 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
             if &sig != b"8BIM" && &sig != b"8B64" {
                 return Err(bad("global tagged block signature"));
             }
-            lm.sig("global tagged key")?;
+            let key = lm.sig("global tagged key")?;
             let n = lm.u32("global tagged length")? as usize;
-            lm.take(n, "global tagged data")?;
+            let data = lm.take(n, "global tagged data")?;
+            if &key == b"Lr16" {
+                if depth != 16 || !layers.is_empty() {
+                    return Err(bad("unexpected Lr16 block"));
+                }
+                let mut li = Cur { b: data, p: 0 };
+                (layer_count_raw, layers) = parse_layer_info(&mut li, 2, keep_pixels)?;
+            }
         }
     }
 
     // Merged image data: everything that remains.
     let merged_compression = c.u16("merged compression")?;
     let rest = c.take(c.rest(), "merged image")?;
-    let (w, h, nch) = (width as usize, height as usize, channels as usize);
+    // `w` is the row length in bytes (16-bit samples are two big-endian bytes).
+    let (w, h, nch) = (width as usize * bps, height as usize, channels as usize);
     let mut merged = Vec::new();
     match merged_compression {
         0 => {

@@ -1,6 +1,19 @@
 //! PSD exporter (FMT-08/09/10, ADR-007, ADR-014): an independent minimal writer implemented from
 //! Adobe's public *Photoshop File Formats Specification*. No third-party PSD code is used.
 //!
+//! # 16 bits per channel (`bit_depth = 16`)
+//! The header depth is 16 and every color, transparency and user-mask sample is a big-endian `u16`
+//! (straight values from `veskra_color::convert::premul16_to_straight16`; masks `v · 257`), still
+//! PackBits-compressed per row. As the specification requires for 16-bit files, the *layer info*
+//! length is written as 0 and the layer records + channel data live in an `Lr16` additional-layer-
+//! information block after the (empty) global layer mask info. The merged image is matted over
+//! white in 16 bits. Opacity, mask default color and flags stay 8-bit fields.
+//!
+//! # Target profile (`profile`)
+//! See `png` module docs: with an explicit target the layer pixels **and** the merged image are
+//! converted (relative colorimetric, `f64` on 16-bit data) and resource 1039 holds the target's
+//! ICC bytes; out-of-gamut pixels are counted on the merged image only.
+//!
 //! # File layout written
 //! * **Header**: `8BPS`, version 1, 8-bit, RGB (mode 3), ≤ 30 000 px per edge (larger documents
 //!   are rejected with `PsdEncodeError`; PSB is not written). Channel count **4** (R, G, B + merged
@@ -39,10 +52,12 @@ mod read;
 
 pub use read::{PsdInfo, PsdLayerInfo, inspect_psd};
 
-use crate::png::{BAND_ROWS, color_plan, composite_band, raster_only_stroke_count, vector_layer_count, warning};
+use crate::png::{
+    BAND_ROWS, ColorPlan, color_plan, composite_band, raster_only_stroke_count, vector_layer_count, warning,
+};
 use crate::{CancelToken, Exporter};
 use std::io::Write;
-use veskra_color::{RgbTransform, convert};
+use veskra_color::convert;
 use veskra_core::export::{
     ExportFormat, ExportOptions, ExportPreflight, ExportReport, ExportWarning, ExportWarningKind, ValidationStatus,
 };
@@ -297,9 +312,11 @@ impl RlePlane {
 
 struct Encoder<'a> {
     doc: &'a Document,
-    to_srgb: Option<&'a RgbTransform>,
+    color: &'a ColorPlan,
     cancel: &'a CancelToken,
     canvas: RectI,
+    /// 16 bits per channel (big-endian samples) instead of 8.
+    deep: bool,
 }
 
 impl Encoder<'_> {
@@ -359,26 +376,39 @@ impl Encoder<'_> {
     fn pixel_record(&self, l: &Layer, p: &PixelContent) -> Result<Record, VeskraError> {
         let (rect, _) = fit_rect(p.tiles.content_bounds(), self.canvas);
         let w = rect.width() as usize;
+        let bps = if self.deep { 2 } else { 1 };
         let mut planes: [RlePlane; 4] = Default::default(); // A, R, G, B
         let mut straight = Vec::new();
-        let mut row = vec![0u8; w];
+        let mut straight16 = Vec::new();
+        let mut row = vec![0u8; w * bps];
         let mut y = rect.y0;
         while y < rect.y1 {
             self.cancel.check()?;
             let y1 = (y + BAND_ROWS as i32).min(rect.y1);
             let band = RectI::new(rect.x0, y, rect.x1, y1);
             let mut px = p.tiles.try_read_rect(band).map_err(VeskraError::from)?;
-            if let Some(t) = self.to_srgb {
-                t.apply_rgba16_premul(&mut px);
-            }
-            straight.resize(px.len(), 0);
-            convert::premul16_to_straight8(&px, &mut straight);
-            for r in straight.chunks_exact(w * 4) {
-                for (pi, ch) in [3usize, 0, 1, 2].into_iter().enumerate() {
-                    for (d, s) in row.iter_mut().zip(r.chunks_exact(4)) {
-                        *d = s[ch];
+            self.color.convert_px(&mut px);
+            if self.deep {
+                straight16.resize(px.len(), 0);
+                convert::premul16_to_straight16(&px, &mut straight16);
+                for r in straight16.chunks_exact(w * 4) {
+                    for (pi, ch) in [3usize, 0, 1, 2].into_iter().enumerate() {
+                        for (d, s) in row.chunks_exact_mut(2).zip(r.chunks_exact(4)) {
+                            d.copy_from_slice(&s[ch].to_be_bytes());
+                        }
+                        planes[pi].push_row(&row)?;
                     }
-                    planes[pi].push_row(&row)?;
+                }
+            } else {
+                straight.resize(px.len(), 0);
+                convert::premul16_to_straight8(&px, &mut straight);
+                for r in straight.chunks_exact(w * 4) {
+                    for (pi, ch) in [3usize, 0, 1, 2].into_iter().enumerate() {
+                        for (d, s) in row.iter_mut().zip(r.chunks_exact(4)) {
+                            *d = s[ch];
+                        }
+                        planes[pi].push_row(&row)?;
+                    }
                 }
             }
             y = y1;
@@ -398,8 +428,15 @@ impl Encoder<'_> {
                 if v.len() != mr.width() as usize * (y1 - y) as usize {
                     return Err(psd_err("mask read failed"));
                 }
+                let mut wide = Vec::new();
                 for r in v.chunks_exact(mr.width() as usize) {
-                    plane.push_row(r)?;
+                    if self.deep {
+                        wide.clear();
+                        wide.extend(r.iter().flat_map(|&m| convert::u8_to_u16(m).to_be_bytes()));
+                        plane.push_row(&wide)?;
+                    } else {
+                        plane.push_row(r)?;
+                    }
                 }
                 y = y1;
             }
@@ -559,16 +596,23 @@ impl Exporter for PsdExporter {
             profile: String::new(),
             width_px: doc.width(),
             height_px: doc.height(),
-            estimated_bytes: a.estimated_bytes,
+            estimated_bytes: a.estimated_bytes * if opts.bit_depth == 16 { 2 } else { 1 },
             warnings: Vec::new(),
+            target_profile: String::new(),
+            bit_depth: opts.bit_depth,
+            rendering_intent: None,
+            gamut_clipping_possible: false,
         };
         match color_plan(doc, opts, self.format()) {
             Ok(cp) => {
-                pf.profile = cp.label;
-                pf.warnings.extend(cp.warnings);
+                pf.target_profile = cp.target_name.clone();
+                pf.rendering_intent = cp.intent();
+                pf.gamut_clipping_possible = cp.clip_possible;
                 if let Some(p) = &cp.embed {
                     pf.estimated_bytes += p.bytes().len() as u64;
                 }
+                pf.profile = cp.label;
+                pf.warnings.extend(cp.warnings);
             }
             Err(e) => {
                 if pf.blocked_reason.is_none() {
@@ -608,7 +652,9 @@ impl Exporter for PsdExporter {
         };
 
         // Layer records first (in memory) so the header channel count is known.
-        let enc = Encoder { doc, to_srgb: cp.to_srgb.as_ref(), cancel, canvas: doc.bounds() };
+        let deep = opts.bit_depth == 16;
+        let bps: usize = if deep { 2 } else { 1 };
+        let enc = Encoder { doc, color: &cp, cancel, canvas: doc.bounds(), deep };
         let mut records = Vec::new();
         enc.walk(doc.root(), &mut records)?;
         let n_layers = i16::try_from(records.len()).map_err(|_| psd_err("too many layer records for PSD"))?;
@@ -622,7 +668,7 @@ impl Exporter for PsdExporter {
         head.extend_from_slice(&channels.to_be_bytes());
         head.extend_from_slice(&h.to_be_bytes());
         head.extend_from_slice(&w.to_be_bytes());
-        head.extend_from_slice(&8u16.to_be_bytes());
+        head.extend_from_slice(&(opts.bit_depth as u16).to_be_bytes());
         head.extend_from_slice(&3u16.to_be_bytes());
         head.extend_from_slice(&0u32.to_be_bytes());
         let mut res = Vec::new();
@@ -659,23 +705,33 @@ impl Exporter for PsdExporter {
         }
         drop(records);
         cancel.check()?;
-        let mut lm = Vec::with_capacity(li.len() + 12);
-        lm.extend_from_slice(&u32_len(li.len(), "layer info")?.to_be_bytes());
-        lm.extend_from_slice(&li);
+        let mut lm = Vec::with_capacity(li.len() + 24);
+        if deep && !li.is_empty() {
+            // 16-bit files: empty layer info, then the records in an `Lr16` tagged block.
+            lm.extend_from_slice(&0u32.to_be_bytes()); // layer info length
+            lm.extend_from_slice(&0u32.to_be_bytes()); // global layer mask info: none
+            lm.extend_from_slice(b"8BIM");
+            lm.extend_from_slice(b"Lr16");
+            lm.extend_from_slice(&u32_len(li.len(), "Lr16 layer info")?.to_be_bytes());
+            lm.extend_from_slice(&li);
+        } else {
+            lm.extend_from_slice(&u32_len(li.len(), "layer info")?.to_be_bytes());
+            lm.extend_from_slice(&li);
+            lm.extend_from_slice(&0u32.to_be_bytes()); // global layer mask info: none
+        }
         drop(li);
-        lm.extend_from_slice(&0u32.to_be_bytes()); // global layer mask info: none
         emit(out, &u32_len(lm.len(), "layer and mask section")?.to_be_bytes())?;
         emit(out, &lm)?;
         drop(lm);
 
         // Merged composite (R, G, B matted over white; A).
         let mut planes: [RlePlane; 4] = Default::default();
-        let mut row: Vec<Vec<u8>> = vec![vec![0u8; w as usize]; 4];
+        let mut row: Vec<Vec<u8>> = vec![vec![0u8; w as usize * bps]; 4];
         let mut y = 0u32;
         while y < h {
             cancel.check()?;
             let y1 = (y + BAND_ROWS).min(h);
-            let px = composite_band(doc, RectI::new(0, y as i32, w as i32, y1 as i32), cp.to_srgb.as_ref());
+            let px = composite_band(doc, RectI::new(0, y as i32, w as i32, y1 as i32), &cp);
             if px.len() != w as usize * (y1 - y) as usize * 4 {
                 return Err(VeskraError::new(ErrorCode::Internal, "compositor returned a short band"));
             }
@@ -685,9 +741,17 @@ impl Exporter for PsdExporter {
                     for c in 0..3 {
                         // Premultiplied color over white: c + (1 - a), then the contract u16 → u8 rounding.
                         let m = (p[c].min(a) as u32 + (65535 - a as u32)) as u16;
-                        row[c][x] = convert::u16_to_u8(m);
+                        if deep {
+                            row[c][x * 2..x * 2 + 2].copy_from_slice(&m.to_be_bytes());
+                        } else {
+                            row[c][x] = convert::u16_to_u8(m);
+                        }
                     }
-                    row[3][x] = convert::u16_to_u8(a);
+                    if deep {
+                        row[3][x * 2..x * 2 + 2].copy_from_slice(&a.to_be_bytes());
+                    } else {
+                        row[3][x] = convert::u16_to_u8(a);
+                    }
                 }
                 for c in 0..channels as usize {
                     planes[c].push_row(&row[c])?;
@@ -709,12 +773,17 @@ impl Exporter for PsdExporter {
         emit(out, &merged)?;
         out.flush().map_err(io_err)?;
 
-        let mut warnings = cp.warnings;
+        let mut warnings = cp.warnings.clone();
+        warnings.extend(cp.clip_warning());
         warnings.extend(analysis.warnings);
         Ok(ExportReport {
             success: false, // set by export_to_path after flush + validation (MASTER_PLAN §7.6)
             file_uri: None,
             format: self.format(),
+            target_profile: cp.target_name.clone(),
+            bit_depth: opts.bit_depth,
+            rendering_intent: cp.intent(),
+            out_of_gamut_pixels: cp.clipped(),
             profile: cp.label,
             profile_embedded: cp.embed.is_some(),
             vector_object_count: 0,
