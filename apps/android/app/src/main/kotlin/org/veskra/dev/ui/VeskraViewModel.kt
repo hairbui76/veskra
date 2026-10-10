@@ -182,6 +182,9 @@ data class UiState(
     /** Where the eraser toggle returns to, and which eraser it picks. */
     val lastPaintBrush: BrushPreset = BrushPreset.DEFAULT,
     val lastEraser: BrushPreset = BrushPreset.ERASER_HARD,
+    /** The pen smudges (drags existing paint) instead of painting with [brush]. */
+    val smudge: Boolean = false,
+    val smudgeStrength: Float = 0.5f,
     val color: HexColor = HexColor.BLACK,
     val secondaryColor: HexColor = HexColor.WHITE,
     val recentColors: List<HexColor> = emptyList(),
@@ -486,6 +489,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         command(Commands.brushSelect(st.brush.id), redraw = false)
         command(Commands.brushSet(size = st.brushSize, opacity = st.brushOpacity, stabilization = st.brushStabilization), redraw = false)
         command(Commands.colorSet(st.color), redraw = false)
+        command(Commands.toolSet(if (st.smudge) "smudge" else "brush", st.smudgeStrength), redraw = false)
     }
 
     /** Editor Back: keep a recovery checkpoint if there are unsaved changes, then show the gallery. */
@@ -515,10 +519,12 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
      * updated from the engine's answer instead of showing the previous brush's numbers.
      */
     fun selectBrush(preset: BrushPreset) {
+        if (_ui.value.tool != Tool.PAINT) setTool(Tool.PAINT)
+        if (_ui.value.smudge) command(Commands.toolSet("brush"), redraw = false)
         _ui.update {
             it.copy(
                 brush = preset,
-                tool = Tool.PAINT,
+                smudge = false,
                 lastPaintBrush = if (preset.isEraser) it.lastPaintBrush else preset,
                 lastEraser = if (preset.isEraser) preset else it.lastEraser,
             )
@@ -538,13 +544,39 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     /** Dock brush button: back to painting with the last non-eraser brush. */
     fun usePaintBrush() {
         val st = _ui.value
-        if (st.brush.isEraser) selectBrush(st.lastPaintBrush) else setTool(Tool.PAINT)
+        when {
+            st.brush.isEraser -> selectBrush(st.lastPaintBrush)
+            st.smudge -> {
+                _ui.update { it.copy(smudge = false) }
+                command(Commands.toolSet("brush"), redraw = false)
+                setTool(Tool.PAINT)
+            }
+            else -> setTool(Tool.PAINT)
+        }
     }
 
     /** Dock eraser button: switch to the last eraser (keeps the paint brush to return to). */
     fun useEraser() {
         val st = _ui.value
-        if (!st.brush.isEraser) selectBrush(st.lastEraser) else setTool(Tool.PAINT)
+        if (!st.brush.isEraser || st.smudge) selectBrush(st.lastEraser) else setTool(Tool.PAINT)
+    }
+
+    /**
+     * Dock smudge button. Smudging uses the brush size; an eraser preset would win over the smudge
+     * tool in the engine, so the last paint brush is selected first.
+     */
+    fun useSmudge() {
+        val st = _ui.value
+        if (st.brush.isEraser) selectBrush(st.lastPaintBrush)
+        _ui.update { it.copy(smudge = true) }
+        command(Commands.toolSet("smudge", st.smudgeStrength), redraw = false)
+        setTool(Tool.PAINT)
+    }
+
+    fun setSmudgeStrength(v: Float) {
+        val s = v.coerceIn(0f, 1f)
+        _ui.update { it.copy(smudgeStrength = s) }
+        command(Commands.toolSet(if (_ui.value.smudge) "smudge" else "brush", s), redraw = false)
     }
 
     fun setBrushStabilization(v: Float) {
@@ -829,7 +861,9 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     /** Draws the placed points as one stroke with the current brush, then starts a fresh path. */
     fun commitPath() {
         val st = _ui.value
-        if (st.pathPoints.size >= 2) shape(Commands.shapePath(st.pathPoints, st.shape.closed, st.shape.smooth, st.shape.fill && st.shape.closed))
+        // A closed path needs at least three points; two points are drawn as an open segment.
+        val closed = st.shape.closed && st.pathPoints.size >= 3
+        if (st.pathPoints.size >= 2) shape(Commands.shapePath(st.pathPoints, closed, st.shape.smooth, st.shape.fill && closed))
         _ui.update { it.copy(pathPoints = emptyList()) }
     }
 
@@ -1038,7 +1072,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------------------------------------------------------- history / autosave
 
     private fun onHistoryChanged(strokeCommitted: Boolean) {
-        if (strokeCommitted && !_ui.value.brush.isEraser) noteColorUsed()
+        if (strokeCommitted && !_ui.value.brush.isEraser && !_ui.value.smudge) noteColorUsed()
         viewModelScope.launch { refreshDocument() }
         if (strokeCommitted) scheduleAutosave()
     }

@@ -236,18 +236,22 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
 }
 
 /**
- * Bottom dock: brush, eraser, current color, secondary color. Tapping the tool that is already
+ * Bottom dock: brush, smudge, eraser, current color, secondary color. Tapping the tool that is already
  * active opens its panel; tapping the secondary color swaps the two colors.
  */
 @Composable
 private fun Dock(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifier) {
     val painting = state.tool == Tool.PAINT
-    val brushActive = painting && !state.brush.isEraser
-    val eraserActive = painting && state.brush.isEraser
+    val brushActive = painting && !state.brush.isEraser && !state.smudge
+    val smudgeActive = painting && state.smudge
+    val eraserActive = painting && state.brush.isEraser && !state.smudge
     Surface(modifier = modifier, shape = RoundedCornerShape(32.dp), tonalElevation = 3.dp, shadowElevation = 6.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(6.dp)) {
             DockButton(VeskraIcons.Brush, stringResource(R.string.tool_brush), brushActive) {
                 if (brushActive) vm.openSheet(EditorSheet.BRUSH) else vm.usePaintBrush()
+            }
+            DockButton(VeskraIcons.Smudge, stringResource(R.string.tool_smudge), smudgeActive) {
+                if (smudgeActive) vm.openSheet(EditorSheet.BRUSH) else vm.useSmudge()
             }
             DockButton(VeskraIcons.Eraser, stringResource(R.string.tool_eraser), eraserActive) {
                 if (eraserActive) vm.openSheet(EditorSheet.BRUSH) else vm.useEraser()

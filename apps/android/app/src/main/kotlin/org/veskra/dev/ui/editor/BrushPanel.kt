@@ -56,7 +56,7 @@ fun brushName(p: BrushPreset): Int = when (p) {
 
 /**
  * Brush panel (DSN-01): the presets of the active kind (paint brushes or erasers) and the size,
- * opacity and smoothing of the current brush. Brush behavior itself is owned by the engine (BRH).
+ * opacity and smoothing of the current brush, or the smudge settings while smudging. Brush behavior itself is owned by the engine (BRH).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -67,6 +67,14 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
             Modifier.padding(16.dp).heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (state.smudge) {
+                // Smudge moves the paint that is already there: it has a size and a strength, no preset.
+                PanelLabel(stringResource(R.string.tool_smudge))
+                SizeSlider(state.brushSize, vm::setBrushSize)
+                FractionSlider(stringResource(R.string.smudge_strength), state.smudgeStrength, vm::setSmudgeStrength)
+                Text(stringResource(R.string.smudge_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@Column
+            }
             PanelLabel(stringResource(if (erasers) R.string.brush_group_erasers else R.string.brush_sheet_title))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), maxItemsInEachRow = 2) {
                 BrushPreset.entries.filter { it.isEraser == erasers }.forEach { preset ->

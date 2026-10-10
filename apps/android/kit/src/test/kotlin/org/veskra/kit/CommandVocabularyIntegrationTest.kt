@@ -138,6 +138,45 @@ class CommandVocabularyIntegrationTest {
     }
 
     @Test
+    fun `stroke-time tool builders are understood by the engine`() {
+        val h = NativeBridge.nativeCreateSession()
+        try {
+            exec(h, Commands.documentCreate(256, 192, 300, "#FFFFFF"))
+            exec(h, Commands.layerAdd(LayerKind.RASTER, "Paint"))
+            exec(h, Commands.colorSet(HexColor(0x2F80C0)))
+            exec(h, Commands.brushSelect(BrushPreset.ROUND_HARD.id))
+
+            for (mode in listOf("vertical", "horizontal", "radial", "off")) exec(h, Commands.symmetrySet(mode, 8))
+            exec(h, Commands.guideLine(PointF(20f, 60f), PointF(180f, 60f)))
+            exec(h, Commands.guideEllipse(40f, 20f, 160f, 100f))
+            exec(h, Commands.guideOff())
+
+            exec(h, Commands.shapeLine(PointF(20f, 20f), PointF(180f, 20f)))
+            exec(h, Commands.shapeRect(40f, 40f, 120f, 100f, fill = false))
+            exec(h, Commands.shapeEllipse(40f, 30f, 160f, 130f, fill = true))
+            val open = listOf(PointF(20f, 80f), PointF(70f, 30f), PointF(120f, 120f))
+            exec(h, Commands.shapePath(open, closed = false, smooth = true, fill = false))
+            exec(h, Commands.shapePath(open, closed = true, smooth = false, fill = true))
+            assertEquals(4, (exec(h, Commands.layerBounds()) as JsonObject).array("bounds")?.size)
+
+            // One symmetric shape is one undo step, however many replicas it draws.
+            exec(h, Commands.symmetrySet("radial", 6))
+            val before = DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)!!.version
+            exec(h, Commands.shapeLine(PointF(128f, 96f), PointF(200f, 96f)))
+            exec(h, Commands.historyUndo())
+            exec(h, Commands.historyRedo())
+            assertTrue(DocumentInfo.fromJson(exec(h, Commands.documentInfo()) as JsonObject)!!.version > before)
+            exec(h, Commands.symmetrySet("off", 6))
+
+            exec(h, Commands.toolSet("smudge", 0.7f))
+            exec(h, Commands.toolSet("eraser"))
+            exec(h, Commands.toolSet("brush"))
+        } finally {
+            NativeBridge.nativeDestroySession(h)
+        }
+    }
+
+    @Test
     fun `raster edit, canvas and export color builders are understood by the engine`() {
         val h = NativeBridge.nativeCreateSession()
         val dir = Files.createTempDirectory("veskra-vocab-raster").toFile()

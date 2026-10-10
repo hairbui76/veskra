@@ -192,6 +192,19 @@ object Commands {
 
     fun guideOff(): JsonObject = json { "cmd" to "guide.set"; "kind" to "off" }
 
+    /**
+     * What the pen does on the input path: [tool] = brush | eraser | smudge. An eraser *preset*
+     * still erases under `brush`; `smudge` drags the layer's own pixels with [strength] in [0, 1].
+     */
+    fun toolSet(tool: String, strength: Float? = null): JsonObject {
+        if (strength != null) require(strength.isFinite() && strength in 0f..1f) { "strength must be in [0,1]" }
+        return json {
+            "cmd" to "tool.set"
+            "tool" to tool
+            if (strength != null) "strength" to strength
+        }
+    }
+
     /** Strokes are projected onto the infinite line through [a] and [b]. */
     fun guideLine(a: PointF, b: PointF): JsonObject = json {
         "cmd" to "guide.set"

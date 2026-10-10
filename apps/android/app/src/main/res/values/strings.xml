@@ -57,6 +57,9 @@
     <string name="editor_canvas_cd">Drawing canvas</string>
     <string name="tool_brush">Brush</string>
     <string name="tool_eraser">Eraser</string>
+    <string name="tool_smudge">Smudge</string>
+    <string name="smudge_strength">Strength</string>
+    <string name="smudge_note">Smudge works on raster layers and uses the brush size (up to 256 px).</string>
     <string name="tool_color">Color</string>
     <string name="tool_layers">Layers</string>
     <string name="tool_undo">Undo</string>
