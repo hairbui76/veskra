@@ -36,3 +36,14 @@
 {"cmd":"export.preflight","format":"svg","options":{"includeVectorPaths":true,"includeRasterAppearance":false,"embedColorProfile":true}}
 {"cmd":"export.run","format":"psd","path":"f.psd"}
 {"cmd":"export.run","format":"pdf","path":"f.pdf","options":{"includeVectorPaths":false,"includeRasterAppearance":true,"embedColorProfile":false,"rasterScale":2.0}}
+{"cmd":"symmetry.set","mode":"radial","count":5,"mirror":true,"cx":30,"cy":20}
+{"cmd":"symmetry.get"}
+{"cmd":"guide.set","kind":"line","x0":4,"y0":6,"x1":50,"y1":40}
+{"cmd":"guide.set","kind":"line","angle":0.6}
+{"cmd":"guide.set","kind":"ellipse","x0":4,"y0":6,"x1":50,"y1":40}
+{"cmd":"tool.set","tool":"smudge","strength":0.7}
+{"cmd":"stroke.begin","eraser":false,"tool":"smudge"}
+{"cmd":"shape.line","x0":3,"y0":4,"x1":60,"y1":40}
+{"cmd":"shape.rect","x0":8,"y0":6,"x1":50,"y1":40,"fill":true}
+{"cmd":"shape.ellipse","x0":8,"y0":6,"x1":50,"y1":40,"fill":false}
+{"cmd":"shape.path","points":[[4,4],[30,40],[55,8],[20,20]],"closed":true,"smooth":true,"fill":true}
