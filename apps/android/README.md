@@ -4,9 +4,10 @@ Kotlin + Jetpack Compose (Material 3) shell around the Rust engine (`crates/vesk
 owns the document, painting, history and rendering; Android owns input capture, display of engine
 tiles, lifecycle, Storage Access Framework (SAF) and UX.
 
-> **Status (2026-10-09): `:kit` builds and its tests run on a plain JVM. `:app` has NEVER been compiled.**
-> The Android SDK/NDK host (`dl.google.com`) is blocked by network policy in the environment where
-> this was written: no SDK, no `android.jar`, no emulator, no device. See "Verification" below.
+> **Status (2026-10-10): `:kit` builds and its tests run on a plain JVM. `:app` builds
+> (`assembleDebug`, `lintDebug`: 0 errors) and runs on an x86_64 tablet emulator (API 36).**
+> Nothing has been run on physical hardware yet: stylus pressure/tilt, latency, palm rejection and
+> multi-touch gestures are still unverified. See "Verification" below.
 
 ## Layout
 
@@ -30,7 +31,8 @@ apps/android/
       TileUploadPlanner.kt   dirty rects → 512×512 display tiles to re-render/upload
       SaveStateMachine.kt    staged save plan (SafCopyPlan), dirty-version tracking (SAV-002), StreamCopier
       EditorModels.kt        HexColor, RecentColors, BrushPreset ids, CanvasSpec limits + memory estimate
-      Geometry.kt            RectI, ViewState (nativeGetView → android Matrix values)
+      ColorMath.kt           HSB / Lab (D50) / naive CMYK conversions for the picker, built-in palettes
+      Geometry.kt            RectI, PointF, Affine (edit.transform convention), ViewState (doc↔view mapping)
     src/test/kotlin/...      JUnit 5 tests incl. NativeBridgeIntegrationTest (skipped without a .so)
   app/                       Android application (namespace/applicationId org.veskra.dev — PROVISIONAL)
     src/main/AndroidManifest.xml   no permissions at all (no INTERNET, no storage; SAF only)
@@ -41,10 +43,22 @@ apps/android/
       canvas/CanvasView.kt       android.view.View: input → PointerPacker → nativeInputBatch; draws tiles
       canvas/MotionEventAdapter.kt  MotionEvent (+historical, +predicted, FLAG_CANCELED) → packed samples
       canvas/CanvasDisplay.kt    UI-thread tile Bitmaps (ARGB_8888, copyPixelsFromBuffer) + view Matrix
+      canvas/TextRasterizer.kt   Text tool: platform text → transparent bitmap → imported as a raster layer
       storage/ProjectStore.kt    app-private dirs, recovery checkpoint meta, SAF copy in/out
       storage/AppPreferences.kt  rail side, remembered export prefs, recent colors
       ui/VeskraViewModel.kt      state, commands, staged save, export, autosave, lifecycle
-      ui/gallery/*, ui/editor/*  Compose screens and sheets; ui/icons (original simple vectors)
+      ui/gallery/*               Gallery, New canvas dialog
+      ui/editor/EditorScreen.kt  full-bleed canvas + floating chrome: Home/save state, Tools/Layers/More,
+                                 Undo/Redo, bottom dock (brush, eraser, two colors), tool option bar
+      ui/editor/ToolOverlay.kt   one-finger gesture → one engine command for every non-paint tool, with
+                                 previews (selection, shapes, transform/distort handles, crop frame);
+                                 two fingers navigate via view.set; CanvasAnnotations draws the selection
+                                 outline, symmetry axes and rulers
+      ui/editor/ToolsPanel.kt    Create / Edit tool grid;  BrushPanel.kt, LayerPanel.kt, ExportSheet.kt
+      ui/editor/ColorPanel.kt    4 tabs: hue wheel + SV square, HSB/RGB/LAB/CMYK sliders + hex, palettes
+                                 (Recent, Basics, Skin Tones, My colors), tone sphere
+      ui/editor/AdjustPanels.kt  color adjust sliders, tone-curve editor, canvas resize dialog
+      ui/icons                   original simple vector icons (no icon-pack dependency)
     src/main/res/values/strings.xml  every user-facing string (localization keys)
 ```
 
@@ -59,6 +73,15 @@ apps/android/
   defaults. Stylus `ACTION_DOWN` calls `requestUnbufferedDispatch` (API 30+). Packing uses a pooled
   `PointerPacker` (no per-event allocation); the batch runs on the engine thread, never the UI thread.
   Gesture arbitration, palm rejection and 2/3-finger undo/redo are the engine's job (veskra-input).
+* **Tools** — painting goes straight to the engine (`nativeInputBatch`). Every other tool is a
+  `Tool` in `VeskraViewModel`; `ToolOverlay` sits above the canvas view, converts the gesture to
+  document coordinates with the inverse view matrix and sends one JSON command. Tools with a live
+  result (transform, distort, color adjust, curves) keep exactly one *preview* on top of the undo
+  stack: each change undoes the previous preview and applies the new parameters to the original
+  pixels, so content is resampled once; Done keeps it, Cancel/Back undoes it.
+* **Color picker** — sRGB only (the v1 working space). Dragging a control repaints the chrome; the
+  engine gets `color.set` when the drag ends. A color joins "Recent" when it is actually used on the
+  canvas. Lab values are D50; CMYK is a naive device conversion and is labelled approximate.
 * **Display** — the engine renders only dirty 512×512 tiles (`TileUploadPlanner`, visible-first) into
   ≤6 reusable direct buffers; the UI thread `copyPixelsFromBuffer`s them into per-tile Bitmaps and
   draws them with `Canvas.concat(matrix from nativeGetView)`. Compose never paints per point.
@@ -136,9 +159,10 @@ the library starts and shows "Drawing engine unavailable" instead of crashing.
 |---|---|
 | `./gradlew :kit:build :kit:test` | **Run here: BUILD SUCCESSFUL. 88 tests: 87 passed, 0 failed, 1 skipped** (`NativeBridgeIntegrationTest`, no `veskra.ffi.lib`). |
 | JNI integration test against a real `.so` | **Not run.** `crates/veskra-ffi` (owned by another agent, in progress) did not compile at the time of writing (`cargo build -p veskra-ffi`: 7 errors in `bridge.rs`). |
-| `:app` compile, lint, APK | **Not run — BLOCKED:** Android SDK host denied by network policy; `:app` is not even configured without an SDK. Expect some compile fixes on first SDK build. |
-| Device behavior: stylus, pressure/tilt, prediction, palm, latency, rotation, lifecycle, SAF providers | **Not run — BLOCKED:** no device or emulator. Needs AND-03/AND-05/AND-09 hardware evidence. |
-| Compose UI, accessibility (TalkBack), 48 dp targets, screenshots | **Not run — BLOCKED:** no SDK/device. Targets are by construction (IconButton/heightIn(48dp)), not measured. |
+| `:app` compile, lint, APK | **Run 2026-10-10 (Windows host, SDK 36, NDK 28.2 instead of the pinned 27.0):** `assembleDebug` succeeds; `lintDebug` 0 errors, 12 warnings. Only the x86_64 `.so` was built (linker env vars, no cargo-ndk), so that APK runs on the emulator only. |
+| Emulator smoke test (Pixel Tablet AVD, API 36, mouse input) | **Run 2026-10-10:** new canvas, all brush presets, eraser, undo/redo, layers, color panel tabs, fill, rect selection + fill, text, transform, save, reopen, recovery, PNG/PSD/SVG/PDF export through SAF. |
+| Device behavior: stylus, pressure/tilt, prediction, palm, multi-touch gestures, latency, rotation, lifecycle, SAF providers | **Not run:** no physical device; the emulator was driven with single-pointer `adb input`. Needs AND-03/AND-05/AND-09 hardware evidence. |
+| Accessibility (TalkBack), measured 48 dp targets | **Not run.** Targets are by construction (48 dp boxes / `heightIn(48.dp)`), not measured. |
 | `scripts/build-rust.sh` | **Not run — BLOCKED:** no NDK. Syntax-checked with `bash -n` only. |
 
 Environment-only workarounds used here (NOT part of the repo): the wrapper distribution was seeded
