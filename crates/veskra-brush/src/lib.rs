@@ -17,6 +17,13 @@
 //! (samples, preset, color, seed, context) no matter how samples are batched (PNT-001).
 //! Vector-eligible presets also yield a fitted centerline and a variable-width outline whose
 //! width is the dab profile's 50 % iso-contour ([`GeometryOut`]).
+//!
+//! One gesture may drive several strokes (a stroke and its symmetry replicas): each has its own
+//! [`StrokeRenderer`], and [`composite_layered`] composites them in order over the shared base so
+//! the result equals committing the strokes one after another.
+//!
+//! [`smudge`] is the one tool here that is not a dab-coverage brush: it moves the layer's own
+//! pixels and therefore has no vector form (see its module docs).
 
 mod coverage;
 mod curve;
@@ -27,6 +34,7 @@ mod noise;
 mod path;
 pub mod preset;
 mod renderer;
+pub mod smudge;
 
 pub use curve::{MAX_CURVE_POINTS, ResponseCurve};
 pub use error::BrushError;
@@ -36,6 +44,7 @@ pub use preset::{
     builtin_preset, builtin_presets, load_preset_json,
 };
 pub use renderer::{
-    FinishedStroke, MAX_DABS_PER_STROKE, MAX_SAMPLE_COORD, MIN_DAB_STEP_PX, StrokeContext, StrokeMode, StrokeRenderer,
-    StrokeStats,
+    FinishedStroke, LayeredPart, MAX_DABS_PER_STROKE, MAX_SAMPLE_COORD, MIN_DAB_STEP_PX, PredictedCoverage,
+    StrokeContext, StrokeMode, StrokeRenderer, StrokeStats, composite_layered,
 };
+pub use smudge::{FinishedSmudge, MAX_SMUDGE_SIZE_PX, SmudgeContext, SmudgeParams, SmudgeStroke};
