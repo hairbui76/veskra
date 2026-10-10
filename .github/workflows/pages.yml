@@ -1,13 +1,13 @@
 name: Website
 
-# Publishes site/ (the landing page at https://veskra.hairbui76.id.vn) to GitHub Pages.
-# The download buttons read the newest release from the GitHub API in the browser, so a new
-# release does not need a redeploy.
+# Publishes site/ (the landing page at https://veskra.hairbui76.id.vn) to GitHub Pages, together
+# with the APKs of the newest release (scripts/site_release_bundle.py) so the download buttons
+# fetch from the site's own domain. release.yml re-runs this after every published release.
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", ".github/workflows/pages.yml", "scripts/site_release_bundle.py"]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Bundle the newest release's APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/site_release_bundle.py site/download
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

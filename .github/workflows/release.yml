@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write # to redeploy the website with the new APKs
 
 env:
   CARGO_TERM_COLOR: always
@@ -107,3 +108,9 @@ jobs:
             [[ "$tag" == *-* ]] && flags+=(--prerelease)
             gh release create "$tag" dist/* "${flags[@]}" --title "Veskra ${tag#v}" --generate-notes
           fi
+
+      - name: Redeploy the website with these APKs
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main

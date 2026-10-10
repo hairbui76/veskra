@@ -9,3 +9,6 @@
 *.iml
 /scratch/
 __pycache__/
+
+# Website release bundle (generated at deploy time by scripts/site_release_bundle.py)
+/site/download/

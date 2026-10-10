@@ -1,17 +1,14 @@
-// Veskra landing page: language switch (EN / VI) and the newest release's download links.
-// Without JavaScript the page is English and the links point at the build that was current when
-// the page was published.
+// Veskra landing page: language switch (EN / VI) and the version / size labels of the bundled
+// release. Without JavaScript the page is English and the download links still work.
 (() => {
   "use strict";
-
-  const REPO = "hairbui76/veskra";
-  const ASSET_SUFFIX = { "arm64-v8a": "-arm64-v8a.apk", x86_64: "-x86_64.apk", universal: "-universal.apk", sums: "SHA256SUMS.txt" };
 
   const VI = {
     "skip": "Bỏ qua, tới nội dung",
     "nav.features": "Tính năng",
     "nav.color": "Màu sắc",
     "nav.download": "Tải về",
+    "nav.get": "Tải về",
     "hero.badge": "Bản thử nghiệm alpha · Android 10+",
     "hero.title1": "Vẽ trên tablet.",
     "hero.title2": "Xuất file chuẩn studio.",
@@ -145,30 +142,29 @@
 
   apply(initialLang());
 
-  // Newest release, pre-releases included (GitHub's /releases/latest skips them).
+  // download/latest.json is written at deploy time from the newest GitHub release (pre-releases
+  // included) and the APKs sit next to it on this domain, so the buttons download directly.
   async function loadRelease() {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
+    const res = await fetch("download/latest.json", { cache: "no-cache" });
     if (!res.ok) return;
-    const release = (await res.json()).find((r) => !r.draft && r.assets && r.assets.some((a) => a.name.endsWith(".apk")));
-    if (!release) return;
+    const release = await res.json();
 
-    document.querySelectorAll('[data-release="version"]').forEach((el) => (el.textContent = release.tag_name));
-    document.querySelectorAll('[data-release="link"]').forEach((el) => (el.href = release.html_url));
-    releaseDate = new Date(release.published_at || release.created_at);
+    document.querySelectorAll('[data-release="version"]').forEach((el) => (el.textContent = release.tag));
+    document.querySelectorAll('[data-release="link"]').forEach((el) => (el.href = release.url));
+    releaseDate = new Date(release.published);
     showDate();
 
-    for (const [key, suffix] of Object.entries(ASSET_SUFFIX)) {
-      const asset = release.assets.find((a) => a.name.endsWith(suffix));
-      if (!asset) continue;
-      document.querySelectorAll(`[data-release-asset="${key}"]`).forEach((el) => (el.href = asset.browser_download_url));
+    for (const [key, asset] of Object.entries(release.assets)) {
+      document.querySelectorAll(`[data-release-asset="${key}"]`).forEach((el) => {
+        el.href = "download/" + asset.file;
+        el.setAttribute("download", asset.name);
+      });
       const mb = (asset.size / (1024 * 1024)).toFixed(1) + " MB";
       document.querySelectorAll(`[data-release-size="${key}"]`).forEach((el) => (el.textContent = mb));
     }
   }
 
   loadRelease().catch(() => {
-    /* offline or rate-limited: the links already point at a published build */
+    /* the links already point at the files bundled with this deploy */
   });
 })();
