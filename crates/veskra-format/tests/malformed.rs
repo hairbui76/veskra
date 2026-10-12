@@ -191,18 +191,18 @@ fn sav007_future_schema_refused_without_modification() {
     let a = simple_bundle();
     let b = tamper(&a, |e| {
         edit_json(e, "manifest.json", |v| {
-            v["schema"] = 2.into();
-            v["minReader"] = 2.into();
+            v["schema"] = 3.into();
+            v["minReader"] = 3.into();
         })
     });
     let before = b.clone();
     let err = decode(&b).unwrap_err();
-    assert!(matches!(err, FormatError::UnsupportedSchema { schema: 2, min_reader: 2, supported: 1 }), "{err:?}");
+    assert!(matches!(err, FormatError::UnsupportedSchema { schema: 3, min_reader: 3, supported: 2 }), "{err:?}");
     assert_eq!(VeskraError::from(err).code, ErrorCode::UnsupportedSchema);
     assert_eq!(b, before);
     let info = inspect(&b).unwrap();
     assert!(!info.schema_supported);
-    assert_eq!(info.manifest.schema, 2);
+    assert_eq!(info.manifest.schema, 3);
     // Older schema without a registered migration is refused too.
     let old = tamper(&a, |e| {
         edit_json(e, "manifest.json", |v| {

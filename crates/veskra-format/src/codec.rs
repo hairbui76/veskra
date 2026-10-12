@@ -4,7 +4,7 @@ use crate::dto::*;
 use crate::error::{FormatError, FormatWarning};
 use crate::migrate::{MIGRATIONS, has_path, migrate};
 use crate::zip::{Method, ZipReader, ZipWriter};
-use crate::{CURRENT_SCHEMA, FORMAT_NAME, MIMETYPE, PIXEL_V1};
+use crate::{CURRENT_SCHEMA, FORMAT_NAME, MIMETYPE, MIN_NATIVE_SCHEMA, PIXEL_V1};
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -129,6 +129,12 @@ fn selection_name(c: TileCoord) -> String {
 }
 fn stroke_name(id: veskra_core::StrokeId) -> String {
     format!("strokes/{id}.bin")
+}
+fn brush_asset_name(hash: &str) -> String {
+    format!("brushes/{hash}.png")
+}
+fn is_asset_hash(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 fn profile_name(hash: &[u8; 32]) -> String {
     format!("profiles/{}.icc", hex(hash))
@@ -399,7 +405,12 @@ pub fn encode_to<W: Write>(
         strokes.push(StrokeDto {
             id: s.id,
             layer: s.layer,
-            brush: BrushDto { id: s.brush_id.clone(), version: s.brush_version, params: s.brush_params.clone() },
+            brush: BrushDto {
+                id: s.brush_id.clone(),
+                version: s.brush_version,
+                params: s.brush_params.clone(),
+                assets: s.brush_assets.clone(),
+            },
             color: [s.color.r, s.color.g, s.color.b, s.color.a],
             seed: s.deterministic_seed,
             profile: s.color_profile.clone(),
@@ -425,6 +436,19 @@ pub fn encode_to<W: Write>(
         None => None,
     };
 
+    // Schema 2: embed the brush assets the strokes reference. A reference whose bytes the
+    // document does not hold (it was already missing when the file was opened) stays a
+    // reference; the reader reports it as `MissingBrushAssets`.
+    let mut brush_assets = Vec::new();
+    for hash in doc.referenced_brush_assets() {
+        if let Some(png) = doc.brush_asset(hash) {
+            plan.add(brush_asset_name(hash), Source::Bytes(Cow::Borrowed(png)), Method::Stored)?;
+            brush_assets.push(hash.to_string());
+        }
+    }
+    let uses_v2 = !brush_assets.is_empty() || doc.iter_strokes().any(|s| !s.brush_assets.is_empty());
+    let schema = if uses_v2 { CURRENT_SCHEMA } else { MIN_NATIVE_SCHEMA };
+
     let dto = DocumentDto {
         id: doc.id,
         width: doc.width(),
@@ -441,6 +465,7 @@ pub fn encode_to<W: Write>(
         strokes,
         selection,
         active_layer: doc.active_layer,
+        brush_assets,
     };
     let doc_json = to_json(&dto)?;
     plan.add(ENTRY_DOCUMENT.into(), Source::Bytes(Cow::Owned(doc_json)), Method::Deflated)?;
@@ -450,8 +475,8 @@ pub fn encode_to<W: Write>(
 
     let manifest = Manifest {
         format: FORMAT_NAME.into(),
-        schema: CURRENT_SCHEMA,
-        min_reader: CURRENT_SCHEMA,
+        schema,
+        min_reader: MIN_NATIVE_SCHEMA,
         app_version: meta.app_version.clone(),
         created: meta.created.clone(),
         document_id: doc.id,
@@ -505,11 +530,11 @@ fn gate(v: &Value) -> Result<(u32, u32, Vec<FormatWarning>), FormatError> {
     let mut warnings = Vec::new();
     if schema > CURRENT_SCHEMA {
         warnings.push(FormatWarning::NewerSchema { schema });
-    } else if schema < CURRENT_SCHEMA {
-        if !has_path(MIGRATIONS, schema, CURRENT_SCHEMA) {
+    } else if schema < MIN_NATIVE_SCHEMA {
+        if !has_path(MIGRATIONS, schema, MIN_NATIVE_SCHEMA) {
             return Err(unsupported);
         }
-        warnings.push(FormatWarning::Migrated { from: schema, to: CURRENT_SCHEMA });
+        warnings.push(FormatWarning::Migrated { from: schema, to: MIN_NATIVE_SCHEMA });
     }
     Ok((schema, min_reader, warnings))
 }
@@ -758,7 +783,7 @@ pub fn decode(bytes: &[u8]) -> Result<LoadedDocument, FormatError> {
     let b = Bundle::open(bytes)?;
     let mut warnings = b.warnings.clone();
     let mut value = b.read_json(ENTRY_DOCUMENT)?;
-    if b.manifest.schema < CURRENT_SCHEMA {
+    if b.manifest.schema < MIN_NATIVE_SCHEMA {
         value = migrate(&b.manifest, value)?;
     }
     let dto: DocumentDto = parse_dto(&value, ENTRY_DOCUMENT, &mut warnings)?;
@@ -829,6 +854,29 @@ pub fn decode(bytes: &[u8]) -> Result<LoadedDocument, FormatError> {
         layers.push(Layer { id: l.id, parent: l.parent, props, kind });
     }
 
+    // Embedded brush assets (schema 2): bounded, hash-named, PNG-signed. The mask hash itself is
+    // verified by veskra-brush when a stroke is re-rendered.
+    if dto.brush_assets.len() > veskra_doc::MAX_DOCUMENT_BRUSH_ASSETS {
+        return Err(FormatError::Limit("too many brush assets".into()));
+    }
+    let mut assets: Vec<(String, Vec<u8>)> = Vec::with_capacity(dto.brush_assets.len());
+    for hash in &dto.brush_assets {
+        if !is_asset_hash(hash) {
+            return Err(corrupt("brush asset hash malformed"));
+        }
+        let name = brush_asset_name(hash);
+        if b.declared_size(&name)? > veskra_doc::MAX_BRUSH_ASSET_BYTES as u64 {
+            return Err(FormatError::Limit("brush asset exceeds MAX_BRUSH_ASSET_BYTES".into()));
+        }
+        let png = d.take(&name)?;
+        if !png.starts_with(&PNG_SIGNATURE) {
+            return Err(corrupt("brush asset is not a PNG"));
+        }
+        assets.push((hash.clone(), png));
+    }
+    let embedded: BTreeSet<&str> = dto.brush_assets.iter().map(String::as_str).collect();
+    let mut missing: BTreeSet<&str> = BTreeSet::new();
+
     let mut strokes = Vec::with_capacity(dto.strokes.len());
     for s in &dto.strokes {
         if s.sample_entry != stroke_name(s.id) {
@@ -868,7 +916,10 @@ pub fn decode(bytes: &[u8]) -> Result<LoadedDocument, FormatError> {
             }),
             s.bounds,
         )
-        .map_err(doc_err)?;
+        .map_err(doc_err)?
+        .with_brush_assets(s.brush.assets.clone())
+        .map_err(|_| corrupt("stroke brush asset references malformed"))?;
+        missing.extend(s.brush.assets.iter().map(String::as_str).filter(|h| !embedded.contains(h)));
         strokes.push(rec);
     }
 
@@ -903,6 +954,12 @@ pub fn decode(bytes: &[u8]) -> Result<LoadedDocument, FormatError> {
         selection,
         active_layer: dto.active_layer,
     };
-    let doc = Document::from_parts(parts).map_err(doc_err)?;
+    let mut doc = Document::from_parts(parts).map_err(doc_err)?;
+    for (hash, png) in assets {
+        doc.insert_brush_asset(&hash, Arc::from(png)).map_err(doc_err)?;
+    }
+    if !missing.is_empty() {
+        warnings.push(FormatWarning::MissingBrushAssets { count: missing.len() });
+    }
     Ok(LoadedDocument { doc, manifest: b.manifest, warnings })
 }

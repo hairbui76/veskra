@@ -1,12 +1,12 @@
 //! Schema migration framework (ADR-009: migrations are functions `vN -> vN+1` with fixtures).
 //!
-//! Only schema 1 exists, so the production registry [`MIGRATIONS`] is empty and schema-1
-//! documents pass through unchanged. When schema 2 is introduced, add
-//! `Migration { from: 1, apply: v1_to_v2 }` here plus a committed schema-1 fixture that the
-//! new reader must open.
+//! Schemas 1 and 2 are both read natively (schema 2 only adds optional brush-asset data), so the
+//! production registry [`MIGRATIONS`] is empty and migration targets [`MIN_NATIVE_SCHEMA`]. A
+//! future schema that changes meaning adds `Migration { from: N, apply: vN_to_vN1 }` here plus a
+//! committed fixture of the older schema that the new reader must open.
 
 use crate::error::FormatError;
-use crate::{CURRENT_SCHEMA, Manifest};
+use crate::{MIN_NATIVE_SCHEMA, Manifest};
 use serde_json::Value;
 
 /// One `from -> from + 1` step over the `project/document.json` value.
@@ -19,10 +19,11 @@ pub struct Migration {
 /// Production registry (empty: schema 1 is the first released schema).
 pub const MIGRATIONS: &[Migration] = &[];
 
-/// Migrate a document JSON value from `manifest.schema` to [`CURRENT_SCHEMA`].
-/// Newer schemas are returned unchanged (the caller has already applied the `minReader` gate).
+/// Migrate a document JSON value from `manifest.schema` to [`MIN_NATIVE_SCHEMA`].
+/// Natively read and newer schemas are returned unchanged (the caller has already applied the
+/// `minReader` gate).
 pub fn migrate(manifest: &Manifest, doc_json: Value) -> Result<Value, FormatError> {
-    migrate_with(MIGRATIONS, manifest.schema, CURRENT_SCHEMA, doc_json)
+    migrate_with(MIGRATIONS, manifest.schema, MIN_NATIVE_SCHEMA, doc_json)
 }
 
 /// Whether a migration path `from -> to` exists in `registry` (trivially true when `from >= to`).
@@ -61,7 +62,8 @@ mod tests {
     #[test]
     fn v1_passes_through_production_registry() {
         let v = json!({"layers": [], "x": 1});
-        assert_eq!(migrate_with(MIGRATIONS, 1, CURRENT_SCHEMA, v.clone()).unwrap(), v);
+        assert_eq!(migrate_with(MIGRATIONS, 1, MIN_NATIVE_SCHEMA, v.clone()).unwrap(), v);
+        assert_eq!(migrate_with(MIGRATIONS, 2, MIN_NATIVE_SCHEMA, v.clone()).unwrap(), v);
         assert!(has_path(MIGRATIONS, 1, 1));
         assert!(!has_path(MIGRATIONS, 0, 1));
         assert!(matches!(

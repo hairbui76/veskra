@@ -28,8 +28,8 @@ fn generate() -> Vec<(&'static str, Vec<u8>)> {
     });
     let future = tamper(&simple, |e| {
         edit_json(e, "manifest.json", |v| {
-            v["schema"] = 2.into();
-            v["minReader"] = 2.into();
+            v["schema"] = 3.into();
+            v["minReader"] = 3.into();
         })
     });
     let truncated = simple[..simple.len() * 6 / 10].to_vec();
@@ -87,7 +87,7 @@ fn committed_invalid_fixtures_fail_with_typed_errors() {
     assert_eq!(code("corrupt-manifest.veskra"), ErrorCode::CorruptData);
     assert_eq!(code("truncated.veskra"), ErrorCode::CorruptData);
     let e = decode(&read("future-schema.veskra")).unwrap_err();
-    assert!(matches!(e, FormatError::UnsupportedSchema { schema: 2, min_reader: 2, .. }), "{e:?}");
+    assert!(matches!(e, FormatError::UnsupportedSchema { schema: 3, min_reader: 3, .. }), "{e:?}");
     assert!(!inspect(&read("future-schema.veskra")).unwrap().schema_supported);
 }
 

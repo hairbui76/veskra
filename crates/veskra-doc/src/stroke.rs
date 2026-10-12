@@ -61,6 +61,19 @@ pub struct StrokeRecord {
     pub geometry: Option<StrokeGeometry>,
     /// Pixel bounds the stroke touched.
     pub bounds: RectI,
+    /// Content hashes (64 lowercase hex, sorted, unique) of the brush assets (image tips /
+    /// textures) `brush_params` references. Their bytes live in the document's brush-asset store
+    /// ([`crate::Document::brush_asset`]) so the stroke can be re-rendered without the brush
+    /// library (ADR-019). Empty for round / procedural brushes.
+    pub brush_assets: Vec<String>,
+}
+
+/// Most brush assets one stroke may reference.
+pub const MAX_STROKE_BRUSH_ASSETS: usize = 8;
+
+/// 64 lowercase hex characters.
+pub(crate) fn is_asset_hash(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 impl StrokeRecord {
@@ -102,7 +115,21 @@ impl StrokeRecord {
             vector_eligible,
             geometry,
             bounds,
+            brush_assets: Vec::new(),
         })
+    }
+
+    /// The same record referencing brush assets `hashes` (validated, sorted, deduplicated).
+    pub fn with_brush_assets(mut self, mut hashes: Vec<String>) -> Result<Self, VeskraError> {
+        hashes.sort();
+        hashes.dedup();
+        if hashes.len() > MAX_STROKE_BRUSH_ASSETS || !hashes.iter().all(|h| is_asset_hash(h)) {
+            return Err(VeskraError::invalid(
+                "stroke brush asset references must be at most 8 lowercase SHA-256 hex hashes",
+            ));
+        }
+        self.brush_assets = hashes;
+        Ok(self)
     }
 
     fn check_samples(samples: &[StrokeSample]) -> Result<(), VeskraError> {

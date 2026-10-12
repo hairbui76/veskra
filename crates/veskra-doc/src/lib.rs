@@ -17,9 +17,12 @@ mod history;
 mod layer;
 mod stroke;
 
-pub use document::{CanvasMap, DocColor, Document, DocumentError, DocumentParts, LayerPatch, Placement};
+pub use document::{
+    CanvasMap, DocColor, Document, DocumentError, DocumentParts, LayerPatch, MAX_BRUSH_ASSET_BYTES,
+    MAX_DOCUMENT_BRUSH_ASSETS, Placement,
+};
 pub use history::{History, HistoryConfig, HistoryStats};
 pub use layer::{GroupContent, Layer, LayerKind, LayerKindTag, LayerProps, PixelContent, VectorFidelity};
-pub use stroke::{StrokeComposition, StrokeGeometry, StrokeMode, StrokeRecord};
+pub use stroke::{MAX_STROKE_BRUSH_ASSETS, StrokeComposition, StrokeGeometry, StrokeMode, StrokeRecord};
 
 pub use veskra_raster::{MaskGrid, TileGrid};

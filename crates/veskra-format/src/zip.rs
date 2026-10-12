@@ -12,6 +12,11 @@
 //!
 //! The writer is deterministic: fixed DOS timestamp (1980-01-01 00:00), fixed "version made by",
 //! no extra fields, no comments, so identical inputs give identical bytes.
+//!
+//! [`ZipPolicy`] selects what the reader accepts. `.veskra` bundles use [`ZipPolicy::BUNDLE`]
+//! (the strict subset above). Third-party archives (brush packs, ADR-019) use a policy that also
+//! accepts data descriptors (flag bit 3, sizes/CRC taken from the central directory, which is
+//! authoritative) and bytes prepended to the archive, with their own, tighter size limits.
 
 use crate::error::FormatError;
 use std::borrow::Cow;
@@ -33,6 +38,8 @@ const VERSION: u16 = 20;
 const FLAG_UTF8: u16 = 1 << 11;
 /// Flag bits 1-2 only describe DEFLATE compression level; harmless.
 const FLAG_DEFLATE_OPTS: u16 = 0b110;
+/// Flag bit 3: CRC and sizes follow the data in a data descriptor.
+const FLAG_DATA_DESCRIPTOR: u16 = 1 << 3;
 /// Fixed DOS time 00:00:00.
 const DOS_TIME: u16 = 0;
 /// Fixed DOS date 1980-01-01 (year offset 0, month 1, day 1).
@@ -124,6 +131,34 @@ pub fn validate_name(b: &[u8]) -> Result<String, FormatError> {
     Ok(s.to_string())
 }
 
+/// What [`ZipReader::parse_with`] accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ZipPolicy {
+    /// Accept general-purpose flag bit 3 (local header sizes/CRC may be zero; the central
+    /// directory values are used and still verified on read).
+    pub data_descriptors: bool,
+    /// Accept bytes before the first local header (offsets are shifted by the difference between
+    /// the end-of-central-directory position and the declared central directory end).
+    pub prefixed: bool,
+    /// Largest uncompressed entry.
+    pub max_entry_bytes: u64,
+    /// Largest total uncompressed size.
+    pub max_total_bytes: u64,
+    /// Most entries.
+    pub max_entries: usize,
+}
+
+impl ZipPolicy {
+    /// `.veskra` bundles (ADR-009): the strict subset and `veskra_core::limits`.
+    pub const BUNDLE: ZipPolicy = ZipPolicy {
+        data_descriptors: false,
+        prefixed: false,
+        max_entry_bytes: limits::MAX_BUNDLE_ENTRY_BYTES,
+        max_total_bytes: limits::MAX_BUNDLE_TOTAL_BYTES,
+        max_entries: limits::MAX_BUNDLE_ENTRIES,
+    };
+}
+
 /// Validated, read-only view of a ZIP archive held in memory.
 #[derive(Debug)]
 pub struct ZipReader<'a> {
@@ -133,8 +168,14 @@ pub struct ZipReader<'a> {
 }
 
 impl<'a> ZipReader<'a> {
-    /// Parse and validate the archive structure (no decompression happens here).
+    /// Parse and validate the archive structure (no decompression happens here) with
+    /// [`ZipPolicy::BUNDLE`].
     pub fn parse(data: &'a [u8]) -> Result<Self, FormatError> {
+        Self::parse_with(data, &ZipPolicy::BUNDLE)
+    }
+
+    /// [`ZipReader::parse`] with an explicit [`ZipPolicy`].
+    pub fn parse_with(data: &'a [u8], policy: &ZipPolicy) -> Result<Self, FormatError> {
         if data.len() as u64 > MAX_ARCHIVE_BYTES + 1 {
             return Err(FormatError::Limit("archive larger than 4 GiB (zip64 unsupported)".into()));
         }
@@ -153,14 +194,21 @@ impl<'a> ZipReader<'a> {
             return Err(corrupt("multi-disk archives are not supported"));
         }
         let n = n_total as usize;
-        if n > limits::MAX_BUNDLE_ENTRIES {
+        if n > policy.max_entries {
             return Err(FormatError::Limit("too many entries".into()));
         }
-        let cd_off = cd_off as usize;
-        let cd_end = cd_off.checked_add(cd_size as usize).ok_or_else(|| corrupt("central directory overflow"))?;
-        if cd_end != eocd {
+        let declared_end =
+            (cd_off as usize).checked_add(cd_size as usize).ok_or_else(|| corrupt("central directory overflow"))?;
+        // Bytes prepended to the archive shift every stored offset by the same amount.
+        let shift = if declared_end == eocd {
+            0
+        } else if policy.prefixed && declared_end < eocd {
+            eocd - declared_end
+        } else {
             return Err(corrupt("central directory does not end at EOCD"));
-        }
+        };
+        let cd_off = cd_off as usize + shift;
+        let cd_end = eocd;
         if n.checked_mul(CENTRAL_LEN).is_none_or(|need| need > cd_size as usize) {
             return Err(corrupt("central directory too small for entry count"));
         }
@@ -170,9 +218,9 @@ impl<'a> ZipReader<'a> {
         let mut total: u64 = 0;
         let mut p = cd_off;
         for i in 0..n {
-            let e = parse_central(data, p, cd_off, cd_end)?;
+            let e = parse_central(data, p, cd_off, cd_end, shift, policy)?;
             total = total.checked_add(e.0.uncompressed_size).ok_or_else(|| corrupt("size overflow"))?;
-            if total > limits::MAX_BUNDLE_TOTAL_BYTES {
+            if total > policy.max_total_bytes {
                 return Err(FormatError::Limit("total decompressed size exceeds bundle limit".into()));
             }
             if by_name.insert(e.0.name.clone(), i).is_some() {
@@ -251,7 +299,14 @@ fn find_eocd(data: &[u8]) -> Result<usize, FormatError> {
 
 /// Parse one central-directory record at `p` and validate its local header.
 /// Returns the entry and the offset of the next record.
-fn parse_central(data: &[u8], p: usize, cd_off: usize, cd_end: usize) -> Result<(ZipEntry, usize), FormatError> {
+fn parse_central(
+    data: &[u8],
+    p: usize,
+    cd_off: usize,
+    cd_end: usize,
+    shift: usize,
+    policy: &ZipPolicy,
+) -> Result<(ZipEntry, usize), FormatError> {
     let trunc = || corrupt("truncated central directory");
     if rd_u32(data, p) != Some(SIG_CENTRAL) {
         return Err(corrupt("bad central directory signature"));
@@ -265,7 +320,7 @@ fn parse_central(data: &[u8], p: usize, cd_off: usize, cd_end: usize) -> Result<
     let usize_ = u32_at(24)?;
     let (nlen, xlen, clen) = (u16_at(28)? as usize, u16_at(30)? as usize, u16_at(32)? as usize);
     let disk_start = u16_at(34)?;
-    let local_off = u32_at(42)? as usize;
+    let local_off = (u32_at(42)? as usize).saturating_add(shift);
 
     let name_start = p.saturating_add(CENTRAL_LEN);
     let next = name_start.saturating_add(nlen).saturating_add(xlen).saturating_add(clen);
@@ -273,7 +328,12 @@ fn parse_central(data: &[u8], p: usize, cd_off: usize, cd_end: usize) -> Result<
         return Err(trunc());
     }
     let name_bytes = data.get(name_start..name_start.saturating_add(nlen)).ok_or_else(trunc)?;
-    if flags & !(FLAG_UTF8 | FLAG_DEFLATE_OPTS) != 0 {
+    let allowed = if policy.data_descriptors {
+        FLAG_UTF8 | FLAG_DEFLATE_OPTS | FLAG_DATA_DESCRIPTOR
+    } else {
+        FLAG_UTF8 | FLAG_DEFLATE_OPTS
+    };
+    if flags & !allowed != 0 {
         return Err(corrupt("unsupported ZIP flags (encryption, data descriptor or patch data)"));
     }
     let method = Method::from_code(method_code).ok_or_else(|| corrupt("unsupported compression method"))?;
@@ -282,7 +342,7 @@ fn parse_central(data: &[u8], p: usize, cd_off: usize, cd_end: usize) -> Result<
     }
     let name = validate_name(name_bytes)?;
     let (csize, usize_) = (csize as u64, usize_ as u64);
-    if usize_ > limits::MAX_BUNDLE_ENTRY_BYTES {
+    if usize_ > policy.max_entry_bytes {
         return Err(FormatError::Limit("entry exceeds per-entry size limit".into()));
     }
     match method {
@@ -300,11 +360,14 @@ fn parse_central(data: &[u8], p: usize, cd_off: usize, cd_end: usize) -> Result<
     }
     let l16 = |o: usize| rd_u16(data, local_off.saturating_add(o)).ok_or_else(trunc);
     let l32 = |o: usize| rd_u32(data, local_off.saturating_add(o)).ok_or_else(trunc);
+    // With a data descriptor the local CRC/sizes may be zero; the central directory is used.
+    let descriptor = flags & FLAG_DATA_DESCRIPTOR != 0;
+    let local_ok = |v: u32, cd: u64| v as u64 == cd || (descriptor && v == 0);
     if l16(6)? != flags
         || l16(8)? != method_code
-        || l32(14)? != crc
-        || l32(18)? as u64 != csize
-        || l32(22)? as u64 != usize_
+        || !local_ok(l32(14)?, crc as u64)
+        || !local_ok(l32(18)?, csize)
+        || !local_ok(l32(22)?, usize_)
     {
         return Err(lerr());
     }
@@ -503,6 +566,86 @@ mod tests {
         assert!(w.add("../evil", b"x", Method::Stored).is_err());
         w.add("ok", b"x", Method::Stored).unwrap();
         assert!(w.add("ok", b"y", Method::Stored).is_err());
+    }
+
+    fn lenient() -> ZipPolicy {
+        ZipPolicy {
+            data_descriptors: true,
+            prefixed: true,
+            max_entry_bytes: 1 << 20,
+            max_total_bytes: 1 << 22,
+            max_entries: 64,
+        }
+    }
+
+    /// One STORED entry written with a data descriptor (flag bit 3, zero local sizes), the way
+    /// streaming writers do.
+    fn with_descriptor(name: &str, data: &[u8]) -> Vec<u8> {
+        let crc = crc32fast::hash(data);
+        let mut z = Vec::new();
+        put32(&mut z, SIG_LOCAL);
+        put16(&mut z, VERSION);
+        put16(&mut z, FLAG_DATA_DESCRIPTOR);
+        put16(&mut z, 0);
+        put16(&mut z, 0);
+        put16(&mut z, 0);
+        put32(&mut z, 0);
+        put32(&mut z, 0);
+        put32(&mut z, 0);
+        put16(&mut z, name.len() as u16);
+        put16(&mut z, 0);
+        z.extend_from_slice(name.as_bytes());
+        z.extend_from_slice(data);
+        put32(&mut z, 0x0807_4b50);
+        put32(&mut z, crc);
+        put32(&mut z, data.len() as u32);
+        put32(&mut z, data.len() as u32);
+        let cd_off = z.len();
+        put32(&mut z, SIG_CENTRAL);
+        put16(&mut z, VERSION);
+        put16(&mut z, VERSION);
+        put16(&mut z, FLAG_DATA_DESCRIPTOR);
+        put16(&mut z, 0);
+        put16(&mut z, 0);
+        put16(&mut z, 0);
+        put32(&mut z, crc);
+        put32(&mut z, data.len() as u32);
+        put32(&mut z, data.len() as u32);
+        put16(&mut z, name.len() as u16);
+        for _ in 0..4 {
+            put16(&mut z, 0);
+        }
+        put32(&mut z, 0);
+        put32(&mut z, 0);
+        z.extend_from_slice(name.as_bytes());
+        let cd_size = z.len() - cd_off;
+        put32(&mut z, SIG_EOCD);
+        put32(&mut z, 0);
+        put16(&mut z, 1);
+        put16(&mut z, 1);
+        put32(&mut z, cd_size as u32);
+        put32(&mut z, cd_off as u32);
+        put16(&mut z, 0);
+        z
+    }
+
+    #[test]
+    fn lenient_policy_accepts_descriptors_and_prefixes_strict_does_not() {
+        let z = with_descriptor("properties.json", b"{\"a\":1}");
+        assert!(ZipReader::parse(&z).is_err(), "bundles stay strict");
+        let r = ZipReader::parse_with(&z, &lenient()).unwrap();
+        assert_eq!(r.read_name("properties.json").unwrap(), b"{\"a\":1}");
+        // A self-extractor style prefix shifts every offset.
+        let mut pre = b"MZ some stub bytes".to_vec();
+        pre.extend_from_slice(&sample());
+        assert!(ZipReader::parse(&pre).is_err());
+        let r = ZipReader::parse_with(&pre, &lenient()).unwrap();
+        assert_eq!(r.read_name("a/b.txt").unwrap(), vec![7u8; 10_000]);
+        // The policy's own size limits apply.
+        let tight = ZipPolicy { max_entry_bytes: 100, ..lenient() };
+        assert!(matches!(ZipReader::parse_with(&sample(), &tight), Err(FormatError::Limit(_))));
+        let few = ZipPolicy { max_entries: 2, ..lenient() };
+        assert!(matches!(ZipReader::parse_with(&sample(), &few), Err(FormatError::Limit(_))));
     }
 
     #[test]

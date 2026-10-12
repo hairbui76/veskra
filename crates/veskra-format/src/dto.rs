@@ -65,6 +65,9 @@ pub(crate) struct DocumentDto {
     pub strokes: Vec<StrokeDto>,
     pub selection: Option<MaskDto>,
     pub active_layer: Option<LayerId>,
+    /// Schema 2: content hashes of the embedded brush assets (`brushes/<hash>.png`), sorted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub brush_assets: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -160,6 +163,9 @@ pub(crate) struct BrushDto {
     pub version: u32,
     /// Opaque brush parameter string owned by veskra-brush.
     pub params: String,
+    /// Schema 2: brush assets the parameters reference (content hashes).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assets: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
