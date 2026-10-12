@@ -177,6 +177,46 @@ class CommandVocabularyIntegrationTest {
     }
 
     @Test
+    fun `brush library builders are understood by the engine`() {
+        val h = NativeBridge.nativeCreateSession()
+        val dir = Files.createTempDirectory("veskra-vocab-brush").toFile()
+        try {
+            exec(h, Commands.documentCreate(256, 192, 300, "#FFFFFF"))
+            exec(h, Commands.brushLibraryOpen(File(dir, "library").absolutePath))
+            val list = BrushInfo.listFromJson(exec(h, Commands.brushList()) as JsonObject)
+            assertTrue(list.size >= 30, "built-ins: ${list.size}")
+            assertTrue(list.all { it.isBuiltIn && !it.editable })
+            for (b in list) exec(h, Commands.brushSelect(b.id))
+            assertTrue(list.map { it.category }.toSet().containsAll(listOf("pencil", "ink", "marker", "paint", "airbrush", "texture", "eraser")))
+
+            // Duplicate a built-in, give it an image tip from a PNG, save, preview, export, re-import.
+            val copy = (exec(h, Commands.brushDuplicate("ink.gpen", "My pen")) as JsonObject).string("id")!!
+            val preset = (exec(h, Commands.brushGet(copy)) as JsonObject).obj("preset")!!
+            val png = File(System.getProperty("veskra.repo.root") ?: "../../..", "tests/fixtures/import/untagged_rgb8.png")
+            val hash = (exec(h, Commands.brushAssetAdd(png.absolutePath)) as JsonObject).string("hash")!!
+            val edited = preset.with("image", "tip", "shape").with(hash, "tip", "image").with(0.3f, "jitter", "angle")
+            val saved = exec(h, Commands.brushSave(edited)) as JsonObject
+            assertEquals(copy, saved.string("id"))
+            assertEquals(false, saved.bool("vectorEligible"), "image tips export as pixels")
+            assertTrue((saved.int("version") ?: 0) >= 2)
+            val preview = (exec(h, Commands.brushPreview(copy, 320, 64)) as JsonObject).string("png")!!
+            assertTrue(java.util.Base64.getDecoder().decode(preview).size > 100)
+            exec(h, Commands.brushSelect(copy))
+            exec(h, Commands.shapeLine(PointF(10f, 10f), PointF(200f, 120f)))
+
+            val vbrush = File(dir, "my-pen.vbrush")
+            exec(h, Commands.brushExport(copy, vbrush.absolutePath))
+            exec(h, Commands.brushDelete(copy))
+            val report = BrushImportReport.fromJson(exec(h, Commands.brushImport(vbrush.absolutePath)) as JsonObject)
+            assertEquals(1, report.imported.size, report.toString())
+            assertTrue(BrushInfo.listFromJson(exec(h, Commands.brushList()) as JsonObject).any { it.name == "My pen" && it.editable })
+        } finally {
+            NativeBridge.nativeDestroySession(h)
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `cmyk print builders are understood by the engine`() {
         val h = NativeBridge.nativeCreateSession()
         val dir = Files.createTempDirectory("veskra-vocab-cmyk").toFile()
