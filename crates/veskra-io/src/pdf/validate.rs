@@ -2,8 +2,11 @@
 //! written bytes without any writer state: header, `startxref` → classic xref table, every
 //! in-use entry pointing at `N G obj`, trailer `/Root`/`/Size`, every indirect reference
 //! resolving to an in-use object, stream `/Length` framing, Flate streams decompressing, and
-//! balanced `q/Q` and `BDC/EMC` in content streams. It also extracts a small summary
-//! (MediaBox, OCG names and their default `/OFF` state) for tests.
+//! balanced `q/Q` and `BDC/EMC` in content streams, image sample counts matching the image color
+//! space (`/DeviceGray` 1, `/DeviceRGB` 3, `/DeviceCMYK` 4, `[/ICCBased n]` → the profile's `/N`),
+//! and — when present — an `/OutputIntents` destination profile stream with `/N` 1, 3 or 4. It
+//! also extracts a small summary (MediaBox, OCG names and their default `/OFF` state, CMYK
+//! images / fills, output intent, page group color space) for tests.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,6 +25,14 @@ pub struct PdfSummary {
     pub form_xobjects: usize,
     /// Number of `f` (fill) operators across content streams.
     pub fill_ops: usize,
+    /// Image XObjects in `/DeviceCMYK`.
+    pub cmyk_images: usize,
+    /// Number of `k` (DeviceCMYK fill color) operators across content streams.
+    pub cmyk_fill_ops: usize,
+    /// `/N` of the output intent's `/DestOutputProfile`, when the catalog has `/OutputIntents`.
+    pub output_intent_components: Option<u32>,
+    /// Color space of the page's transparency group (`/DeviceRGB`, `/DeviceCMYK` or an object ref).
+    pub page_group_cs: Option<String>,
 }
 
 const MAX_STREAM: usize = 1 << 30;
@@ -241,6 +252,8 @@ pub fn validate_pdf(b: &[u8]) -> Result<PdfSummary, String> {
     let mut summary = PdfSummary { objects: entries.len(), root, ..Default::default() };
     let mut all_refs: BTreeSet<u32> = refs(&trailer).into_iter().collect();
     let mut dicts: BTreeMap<u32, Vec<Tok>> = BTreeMap::new();
+    // Images whose color space is an indirect object: (object, samples, color space object).
+    let mut indirect_images: Vec<(u32, usize, u32)> = Vec::new();
     for (&num, &(off, gen_)) in &entries {
         let head = format!("{num} {gen_} obj");
         if b.get(off..off + head.len()) != Some(head.as_bytes()) {
@@ -294,13 +307,32 @@ pub fn validate_pdf(b: &[u8]) -> Result<PdfSummary, String> {
                         word_after(&toks, "/Width").and_then(|v| v.parse().ok()).ok_or("image without /Width")?;
                     let h: usize =
                         word_after(&toks, "/Height").and_then(|v| v.parse().ok()).ok_or("image without /Height")?;
-                    let gray = has_pair(&toks, "/ColorSpace", "/DeviceGray");
-                    let need = w * h * if gray { 1 } else { 3 };
-                    if decoded.len() != need {
+                    let samples = w.checked_mul(h).ok_or("image too large")?;
+                    let comps = match word_after(&toks, "/ColorSpace") {
+                        Some("/DeviceGray") => 1,
+                        Some("/DeviceRGB") => 3,
+                        Some("/DeviceCMYK") => {
+                            summary.cmyk_images += 1;
+                            4
+                        }
+                        Some(r) => {
+                            let r: u32 =
+                                r.parse().map_err(|_| format!("object {num}: unsupported image color space"))?;
+                            if decoded.len() % samples.max(1) != 0 {
+                                return Err(format!("object {num}: image data is not a whole number of samples"));
+                            }
+                            indirect_images.push((num, decoded.len() / samples.max(1), r));
+                            0
+                        }
+                        None => return Err(format!("object {num}: image without /ColorSpace")),
+                    };
+                    let need = samples * comps;
+                    if comps > 0 && decoded.len() != need {
                         return Err(format!("object {num}: image data {} bytes, expected {need}", decoded.len()));
                     }
                 }
-                None | Some("/Form") if !has_pair(&toks, "/N", "3") => {
+                // Streams with `/N` are ICC profiles, not content.
+                None | Some("/Form") if word_after(&toks, "/N").is_none() => {
                     if subtype == Some("/Form") {
                         summary.form_xobjects += 1;
                     }
@@ -314,6 +346,7 @@ pub fn validate_pdf(b: &[u8]) -> Result<PdfSummary, String> {
                                 "BDC" | "BMC" => mc += 1,
                                 "EMC" => mc -= 1,
                                 "f" => summary.fill_ops += 1,
+                                "k" => summary.cmyk_fill_ops += 1,
                                 _ => {}
                             }
                             if q < 0 || mc < 0 {
@@ -339,6 +372,31 @@ pub fn validate_pdf(b: &[u8]) -> Result<PdfSummary, String> {
     if !has_pair(root_dict, "/Type", "/Catalog") {
         return Err("root is not a /Catalog".into());
     }
+    // `/N` of the ICC stream an object reference (or a `[/ICCBased n 0 R]` array object) names.
+    let icc_components = |r: u32| -> Option<u32> {
+        let t = dicts.get(&r)?;
+        let stream = if t.iter().any(|x| matches!(x, Tok::Word(w) if w == "/ICCBased")) {
+            dicts.get(refs(t).first()?)?
+        } else {
+            t
+        };
+        word_after(stream, "/N")?.parse().ok()
+    };
+    for (num, comps, cs) in indirect_images {
+        match icc_components(cs) {
+            Some(n) if n as usize == comps && matches!(n, 1 | 3 | 4) => {}
+            _ => return Err(format!("object {num}: image samples do not match its ICCBased color space")),
+        }
+    }
+    if root_dict.iter().any(|t| matches!(t, Tok::Word(w) if w == "/OutputIntents")) {
+        let dest = word_after(root_dict, "/DestOutputProfile")
+            .and_then(|v| v.parse::<u32>().ok())
+            .ok_or("output intent without /DestOutputProfile")?;
+        match icc_components(dest) {
+            Some(n) if matches!(n, 1 | 3 | 4) => summary.output_intent_components = Some(n),
+            _ => return Err("output intent profile stream without a valid /N".into()),
+        }
+    }
     let mut ocg_name_by_num = BTreeMap::new();
     for (num, toks) in &dicts {
         if has_pair(toks, "/Type", "/Page")
@@ -353,6 +411,7 @@ pub fn validate_pdf(b: &[u8]) -> Result<PdfSummary, String> {
             if let [a, b2, c, d] = v[..] {
                 summary.media_box = Some([a, b2, c, d]);
             }
+            summary.page_group_cs = word_after(toks, "/CS").map(str::to_string);
         }
         if has_pair(toks, "/Type", "/OCG") {
             let i = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "/Name"));

@@ -165,7 +165,7 @@ fn run(args: &[String]) -> R<Value> {
             }
             let mut s = session(None);
             exec(&mut s, Command::DocumentOpen { path: inp.clone() })?;
-            let pre = exec(&mut s, Command::ExportPreflight { format, options })?;
+            let pre = exec(&mut s, Command::ExportPreflight { format, options: options.clone() })?;
             let rep = exec(&mut s, Command::ExportRun { format, path: outp.clone(), options })?;
             Ok(json!({"preflight": pre, "report": rep}))
         }

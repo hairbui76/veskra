@@ -14,6 +14,17 @@
 //! converted (relative colorimetric, `f64` on 16-bit data) and resource 1039 holds the target's
 //! ICC bytes; out-of-gamut pixels are counted on the merged image only.
 //!
+//! # CMYK (`profile = cmyk`, ADR-018)
+//! Color mode **4** (CMYK). Every layer's pixels and the merged image are converted from the
+//! document RGB to CMYK with the chosen output profile (see [`crate::cmyk`]); layer records carry
+//! channels `-1` (transparency), `0..=3` (C, M, Y, K) and `-2` (mask); the merged image has C, M,
+//! Y, K plus the transparency channel when there are layers. Channel values follow Photoshop's
+//! CMYK convention: **inverted**, 255 / 65535 = no ink, 0 = 100 % ink. The merged image is matted
+//! over paper white in ink space (`ink · alpha`). Resource 1039 holds the CMYK profile bytes when
+//! `embed_color_profile` (untagged CMYK is allowed and warned). Veskra composites in RGB, so
+//! layers with non-Normal blend modes are reported (`BlendModeApproximated`): Photoshop
+//! recomposites CMYK layers in CMYK. Blending ranges list gray + 5 channel pairs (48 bytes).
+//!
 //! # File layout written
 //! * **Header**: `8BPS`, version 1, 8-bit, RGB (mode 3), ≤ 30 000 px per edge (larger documents
 //!   are rejected with `PsdEncodeError`; PSB is not written). Channel count **4** (R, G, B + merged
@@ -52,12 +63,14 @@ mod read;
 
 pub use read::{PsdInfo, PsdLayerInfo, inspect_psd};
 
+use crate::cmyk::CmykPlan;
 use crate::png::{
     BAND_ROWS, ColorPlan, color_plan, composite_band, raster_only_stroke_count, vector_layer_count, warning,
 };
 use crate::{CancelToken, Exporter};
 use std::io::Write;
 use veskra_color::convert;
+use veskra_compose::ComposeOptions;
 use veskra_core::export::{
     ExportFormat, ExportOptions, ExportPreflight, ExportReport, ExportWarning, ExportWarningKind, ValidationStatus,
 };
@@ -266,6 +279,8 @@ struct Record {
     name: String,
     section: Option<(u32, [u8; 4])>,
     protection: u32,
+    /// Blending-range entries (4 bytes each): 10 for RGB, 12 for CMYK.
+    ranges: usize,
 }
 
 fn opacity_byte(o: f32) -> u8 {
@@ -277,8 +292,8 @@ fn empty_channel() -> Vec<u8> {
     vec![0, 0]
 }
 
-fn empty_channels() -> Vec<(i16, Vec<u8>)> {
-    [-1i16, 0, 1, 2].into_iter().map(|id| (id, empty_channel())).collect()
+fn empty_channels(color_channels: i16) -> Vec<(i16, Vec<u8>)> {
+    (-1i16..color_channels).map(|id| (id, empty_channel())).collect()
 }
 
 /// Accumulates PackBits rows for one channel.
@@ -310,9 +325,31 @@ impl RlePlane {
     }
 }
 
+/// How pixel colors are written: RGB (optionally converted to an RGB target) or CMYK.
+#[derive(Clone, Copy)]
+enum Pixels<'a> {
+    Rgb(&'a ColorPlan),
+    Cmyk(&'a CmykPlan),
+}
+
+impl Pixels<'_> {
+    /// Color channels per pixel (3 or 4).
+    fn color_channels(self) -> i16 {
+        match self {
+            Pixels::Rgb(_) => 3,
+            Pixels::Cmyk(_) => 4,
+        }
+    }
+
+    /// Blending-range entries: gray + one source/destination pair per color channel + 1.
+    fn ranges(self) -> usize {
+        2 * (self.color_channels() as usize + 2)
+    }
+}
+
 struct Encoder<'a> {
     doc: &'a Document,
-    color: &'a ColorPlan,
+    color: Pixels<'a>,
     cancel: &'a CancelToken,
     canvas: RectI,
     /// 16 bits per channel (big-endian samples) instead of 8.
@@ -331,7 +368,7 @@ impl Encoder<'_> {
                 LayerKind::Group(g) => {
                     out.push(Record {
                         rect: RectI::EMPTY,
-                        channels: empty_channels(),
+                        channels: empty_channels(self.color.color_channels()),
                         blend: *b"norm",
                         opacity: 255,
                         clipping: 0,
@@ -340,12 +377,13 @@ impl Encoder<'_> {
                         name: GROUP_END_NAME.to_string(),
                         section: Some((3, *b"norm")),
                         protection: 0,
+                        ranges: self.color.ranges(),
                     });
                     self.walk(&g.children, out)?;
                     let key = if g.pass_through { *b"pass" } else { *l.props.blend.psd_key() };
                     out.push(Record {
                         rect: RectI::EMPTY,
-                        channels: empty_channels(),
+                        channels: empty_channels(self.color.color_channels()),
                         blend: key,
                         opacity: opacity_byte(l.props.opacity),
                         clipping: 0, // Veskra ignores clipping on groups
@@ -354,6 +392,7 @@ impl Encoder<'_> {
                         name: l.props.name.clone(),
                         section: Some((if g.collapsed { 2 } else { 1 }, key)),
                         protection: protection(l),
+                        ranges: self.color.ranges(),
                     });
                 }
                 LayerKind::Raster(p) | LayerKind::Vector(p) => out.push(self.pixel_record(l, p)?),
@@ -373,8 +412,60 @@ impl Encoder<'_> {
         f
     }
 
+    /// CMYK layer channels: transparency, then C, M, Y, K inverted (Photoshop: max = no ink).
+    fn cmyk_channels(&self, rect: RectI, p: &PixelContent, cm: &CmykPlan) -> Result<Vec<(i16, Vec<u8>)>, VeskraError> {
+        let w = rect.width() as usize;
+        let bps = if self.deep { 2 } else { 1 };
+        let mut planes: [RlePlane; 5] = Default::default(); // A, C, M, Y, K
+        let mut cmyk = Vec::new();
+        let mut row = vec![0u8; w * bps];
+        let mut y = rect.y0;
+        while y < rect.y1 {
+            self.cancel.check()?;
+            let y1 = (y + BAND_ROWS as i32).min(rect.y1);
+            let px = p.tiles.try_read_rect(RectI::new(rect.x0, y, rect.x1, y1)).map_err(VeskraError::from)?;
+            cm.convert(&px, &mut cmyk, false);
+            for r in cmyk.chunks_exact(w * 5) {
+                for (pi, ch) in [4usize, 0, 1, 2, 3].into_iter().enumerate() {
+                    if self.deep {
+                        for (d, s) in row.chunks_exact_mut(2).zip(r.chunks_exact(5)) {
+                            let v = if ch == 4 { s[4] } else { 65535 - s[ch] };
+                            d.copy_from_slice(&v.to_be_bytes());
+                        }
+                    } else {
+                        for (d, s) in row.iter_mut().zip(r.chunks_exact(5)) {
+                            let a8 = convert::u16_to_u8(s[4]);
+                            *d = match (ch, a8) {
+                                (4, _) => a8,
+                                (_, 0) => 255, // transparent at 8 bits: no ink
+                                _ => convert::u16_to_u8(65535 - s[ch]),
+                            };
+                        }
+                    }
+                    planes[pi].push_row(&row)?;
+                }
+            }
+            y = y1;
+        }
+        let [a, c, m, yy, k] = planes;
+        Ok(vec![
+            (-1i16, a.into_channel()),
+            (0, c.into_channel()),
+            (1, m.into_channel()),
+            (2, yy.into_channel()),
+            (3, k.into_channel()),
+        ])
+    }
+
     fn pixel_record(&self, l: &Layer, p: &PixelContent) -> Result<Record, VeskraError> {
         let (rect, _) = fit_rect(p.tiles.content_bounds(), self.canvas);
+        let color = match self.color {
+            Pixels::Rgb(c) => c,
+            Pixels::Cmyk(cm) => {
+                let channels = self.cmyk_channels(rect, p, cm)?;
+                return self.finish_record(l, p, rect, channels);
+            }
+        };
         let w = rect.width() as usize;
         let bps = if self.deep { 2 } else { 1 };
         let mut planes: [RlePlane; 4] = Default::default(); // A, R, G, B
@@ -387,7 +478,7 @@ impl Encoder<'_> {
             let y1 = (y + BAND_ROWS as i32).min(rect.y1);
             let band = RectI::new(rect.x0, y, rect.x1, y1);
             let mut px = p.tiles.try_read_rect(band).map_err(VeskraError::from)?;
-            self.color.convert_px(&mut px);
+            color.convert_px(&mut px);
             if self.deep {
                 straight16.resize(px.len(), 0);
                 convert::premul16_to_straight16(&px, &mut straight16);
@@ -414,8 +505,19 @@ impl Encoder<'_> {
             y = y1;
         }
         let [a, r, g, b] = planes;
-        let mut channels =
+        let channels =
             vec![(-1i16, a.into_channel()), (0, r.into_channel()), (1, g.into_channel()), (2, b.into_channel())];
+        self.finish_record(l, p, rect, channels)
+    }
+
+    /// Append the user mask channel (if any) and build the record.
+    fn finish_record(
+        &self,
+        l: &Layer,
+        p: &PixelContent,
+        rect: RectI,
+        mut channels: Vec<(i16, Vec<u8>)>,
+    ) -> Result<Record, VeskraError> {
         let mut mask = None;
         if let Some(m) = &p.mask {
             let (mr, _) = fit_rect(mask_non_default_bounds(m), self.canvas);
@@ -454,6 +556,7 @@ impl Encoder<'_> {
             name: l.props.name.clone(),
             section: None,
             protection: protection(l),
+            ranges: self.color.ranges(),
         })
     }
 }
@@ -519,9 +622,9 @@ fn record_bytes(r: &Record) -> Result<Vec<u8>, VeskraError> {
         }
         None => extra.extend_from_slice(&0u32.to_be_bytes()),
     }
-    // Blending ranges: gray + 4 channel pairs, all "pass everything" (0..255 → 0..255).
-    extra.extend_from_slice(&40u32.to_be_bytes());
-    for _ in 0..10 {
+    // Blending ranges: gray + one pair per channel, all "pass everything" (0..255 → 0..255).
+    extra.extend_from_slice(&(4 * r.ranges as u32).to_be_bytes());
+    for _ in 0..r.ranges {
         extra.extend_from_slice(&[0x00, 0x00, 0xFF, 0xFF]);
     }
     extra.extend_from_slice(&pascal_name(&r.name));
@@ -588,7 +691,7 @@ impl Exporter for PsdExporter {
         let a = analyze(doc);
         let mut pf = ExportPreflight {
             format: self.format(),
-            options: *opts,
+            options: opts.clone(),
             blocked_reason: Self::blocked(doc, opts),
             vector_path_count: 0,
             raster_only_stroke_count: raster_only_stroke_count(doc),
@@ -602,7 +705,38 @@ impl Exporter for PsdExporter {
             bit_depth: opts.bit_depth,
             rendering_intent: None,
             gamut_clipping_possible: false,
+            total_area_coverage_max: None,
+            cmyk_profile: None,
         };
+        if opts.is_cmyk() {
+            // Five channels instead of four.
+            pf.estimated_bytes = pf.estimated_bytes / 4 * 5;
+            match CmykPlan::new(doc, opts, self.format()) {
+                Ok(cp) => {
+                    pf.target_profile = cp.target_name.clone();
+                    pf.rendering_intent = Some(cp.intent_name.clone());
+                    pf.gamut_clipping_possible = true;
+                    if cp.embed {
+                        pf.estimated_bytes += cp.profile_bytes().len() as u64;
+                    }
+                    pf.cmyk_profile = Some(cp.info.clone());
+                    pf.warnings.extend(cp.warnings.iter().cloned());
+                    if pf.blocked_reason.is_none() {
+                        let (tac, w) = cp.preflight_warnings(doc);
+                        pf.total_area_coverage_max = tac;
+                        pf.warnings.extend(w);
+                    }
+                    pf.profile = cp.label;
+                }
+                Err(e) => {
+                    if pf.blocked_reason.is_none() {
+                        pf.blocked_reason = Some(e.message);
+                    }
+                }
+            }
+            pf.warnings.extend(a.warnings);
+            return pf;
+        }
         match color_plan(doc, opts, self.format()) {
             Ok(cp) => {
                 pf.target_profile = cp.target_name.clone();
@@ -641,7 +775,13 @@ impl Exporter for PsdExporter {
             return Err(VeskraError::new(code, reason));
         }
         cancel.check()?;
-        let cp = color_plan(doc, opts, self.format())?;
+        let cmyk = if opts.is_cmyk() { Some(CmykPlan::new(doc, opts, self.format())?) } else { None };
+        let cp = if cmyk.is_none() { Some(color_plan(doc, opts, self.format())?) } else { None };
+        let pixels = match (&cp, &cmyk) {
+            (Some(c), _) => Pixels::Rgb(c),
+            (None, Some(k)) => Pixels::Cmyk(k),
+            (None, None) => return Err(VeskraError::new(ErrorCode::Internal, "no color plan")),
+        };
         let analysis = analyze(doc);
         let (w, h) = (doc.width(), doc.height());
         let mut written = 0u64;
@@ -654,11 +794,18 @@ impl Exporter for PsdExporter {
         // Layer records first (in memory) so the header channel count is known.
         let deep = opts.bit_depth == 16;
         let bps: usize = if deep { 2 } else { 1 };
-        let enc = Encoder { doc, color: &cp, cancel, canvas: doc.bounds(), deep };
+        let enc = Encoder { doc, color: pixels, cancel, canvas: doc.bounds(), deep };
         let mut records = Vec::new();
         enc.walk(doc.root(), &mut records)?;
         let n_layers = i16::try_from(records.len()).map_err(|_| psd_err("too many layer records for PSD"))?;
-        let channels: u16 = if records.is_empty() { 3 } else { 4 };
+        let color_channels = pixels.color_channels() as u16;
+        let channels: u16 = if records.is_empty() { color_channels } else { color_channels + 1 };
+        // PSD color modes: 3 = RGB, 4 = CMYK.
+        let mode: u16 = if cmyk.is_some() { 4 } else { 3 };
+        let embed: Option<&[u8]> = match pixels {
+            Pixels::Rgb(c) => c.embed.as_deref().map(|p| p.bytes()),
+            Pixels::Cmyk(k) => k.embed.then(|| k.profile_bytes()),
+        };
 
         // Header, color mode data, image resources.
         let mut head = Vec::with_capacity(64);
@@ -669,7 +816,7 @@ impl Exporter for PsdExporter {
         head.extend_from_slice(&h.to_be_bytes());
         head.extend_from_slice(&w.to_be_bytes());
         head.extend_from_slice(&(opts.bit_depth as u16).to_be_bytes());
-        head.extend_from_slice(&3u16.to_be_bytes());
+        head.extend_from_slice(&mode.to_be_bytes());
         head.extend_from_slice(&0u32.to_be_bytes());
         let mut res = Vec::new();
         let fixed = ((doc.dpi as f64) * 65536.0).round().clamp(65536.0, u32::MAX as f64) as u32;
@@ -680,8 +827,8 @@ impl Exporter for PsdExporter {
             ri.extend_from_slice(&1u16.to_be_bytes()); // display unit: inches
         }
         resource(&mut res, 1005, &ri)?;
-        if let Some(p) = &cp.embed {
-            resource(&mut res, 1039, p.bytes())?;
+        if let Some(p) = embed {
+            resource(&mut res, 1039, p)?;
         }
         head.extend_from_slice(&u32_len(res.len(), "image resources")?.to_be_bytes());
         head.extend_from_slice(&res);
@@ -724,14 +871,50 @@ impl Exporter for PsdExporter {
         emit(out, &lm)?;
         drop(lm);
 
-        // Merged composite (R, G, B matted over white; A).
-        let mut planes: [RlePlane; 4] = Default::default();
-        let mut row: Vec<Vec<u8>> = vec![vec![0u8; w as usize * bps]; 4];
+        // Merged composite (R, G, B matted over white; A) — or C, M, Y, K matted over paper; A.
+        let mut planes: [RlePlane; 5] = Default::default();
+        let mut row: Vec<Vec<u8>> = vec![vec![0u8; w as usize * bps]; 5];
         let mut y = 0u32;
+        let mut cmyk_buf = Vec::new();
         while y < h {
             cancel.check()?;
             let y1 = (y + BAND_ROWS).min(h);
-            let px = composite_band(doc, RectI::new(0, y as i32, w as i32, y1 as i32), &cp);
+            let band = RectI::new(0, y as i32, w as i32, y1 as i32);
+            let color = match pixels {
+                Pixels::Rgb(c) => c,
+                Pixels::Cmyk(k) => {
+                    let px = veskra_compose::composite_rect(doc, band, &ComposeOptions::default());
+                    if px.len() != w as usize * (y1 - y) as usize * 4 {
+                        return Err(VeskraError::new(ErrorCode::Internal, "compositor returned a short band"));
+                    }
+                    k.convert(&px, &mut cmyk_buf, true);
+                    for r in cmyk_buf.chunks_exact(w as usize * 5) {
+                        for (x, s) in r.chunks_exact(5).enumerate() {
+                            let a = s[4];
+                            for c in 0..4 {
+                                // Ink over paper white (ink · alpha), stored inverted (max = no ink).
+                                let m = 65535 - ((s[c] as u32 * a as u32 + 32767) / 65535) as u16;
+                                if deep {
+                                    row[c][x * 2..x * 2 + 2].copy_from_slice(&m.to_be_bytes());
+                                } else {
+                                    row[c][x] = convert::u16_to_u8(m);
+                                }
+                            }
+                            if deep {
+                                row[4][x * 2..x * 2 + 2].copy_from_slice(&a.to_be_bytes());
+                            } else {
+                                row[4][x] = convert::u16_to_u8(a);
+                            }
+                        }
+                        for c in 0..channels as usize {
+                            planes[c].push_row(&row[c])?;
+                        }
+                    }
+                    y = y1;
+                    continue;
+                }
+            };
+            let px = composite_band(doc, band, color);
             if px.len() != w as usize * (y1 - y) as usize * 4 {
                 return Err(VeskraError::new(ErrorCode::Internal, "compositor returned a short band"));
             }
@@ -773,19 +956,42 @@ impl Exporter for PsdExporter {
         emit(out, &merged)?;
         out.flush().map_err(io_err)?;
 
-        let mut warnings = cp.warnings.clone();
-        warnings.extend(cp.clip_warning());
+        let embedded = embed.is_some();
+        let (mut warnings, target_profile, rendering_intent, out_of_gamut_pixels, profile, tac, cmyk_profile) =
+            match pixels {
+                Pixels::Rgb(cp) => {
+                    let mut w = cp.warnings.clone();
+                    w.extend(cp.clip_warning());
+                    (w, cp.target_name.clone(), cp.intent(), cp.clipped(), cp.label.clone(), None, None)
+                }
+                Pixels::Cmyk(k) => {
+                    let mut w = k.warnings.clone();
+                    w.extend(k.gamut_warning());
+                    let s = k.stats();
+                    (
+                        w,
+                        k.target_name.clone(),
+                        Some(k.intent_name.clone()),
+                        s.out_of_gamut,
+                        k.label.clone(),
+                        Some(k.tac()),
+                        Some(k.info.clone()),
+                    )
+                }
+            };
         warnings.extend(analysis.warnings);
         Ok(ExportReport {
             success: false, // set by export_to_path after flush + validation (MASTER_PLAN §7.6)
             file_uri: None,
             format: self.format(),
-            target_profile: cp.target_name.clone(),
+            target_profile,
             bit_depth: opts.bit_depth,
-            rendering_intent: cp.intent(),
-            out_of_gamut_pixels: cp.clipped(),
-            profile: cp.label,
-            profile_embedded: cp.embed.is_some(),
+            rendering_intent,
+            out_of_gamut_pixels,
+            total_area_coverage_max: tac,
+            cmyk_profile,
+            profile,
+            profile_embedded: embedded,
             vector_object_count: 0,
             rasterized_object_count: analysis.rasterized_layers,
             flattened_feature_list: analysis.flattened,

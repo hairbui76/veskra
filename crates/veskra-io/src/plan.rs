@@ -182,12 +182,23 @@ fn doc_profile_info(doc: &Document) -> (bool, String) {
 
 impl IllustratorPlan {
     /// Classify every leaf layer and build the visible stack, hidden resources, counts and
-    /// warnings. Never fails; invalid options produce `blocked_reason` (ILL-004).
+    /// warnings. Never fails; invalid options produce `blocked_reason` (ILL-004). Options are
+    /// validated with the SVG rules (which refuse CMYK); see [`IllustratorPlan::build_for`].
     pub fn build(doc: &Document, opts: &ExportOptions, strategy: HybridStrategy) -> IllustratorPlan {
+        Self::build_for(doc, opts, strategy, ExportFormat::Svg)
+    }
+
+    /// [`build`](Self::build) validating the options for `format` (PDF accepts `profile: cmyk`).
+    pub fn build_for(
+        doc: &Document,
+        opts: &ExportOptions,
+        strategy: HybridStrategy,
+        format: ExportFormat,
+    ) -> IllustratorPlan {
         let (doc_is_srgb, doc_profile) = doc_profile_info(doc);
         let mut plan = IllustratorPlan {
             strategy,
-            options: *opts,
+            options: opts.clone(),
             blocked_reason: None,
             layers: Vec::new(),
             items: Vec::new(),
@@ -200,8 +211,10 @@ impl IllustratorPlan {
             doc_profile,
             index: BTreeMap::new(),
         };
-        // Both Illustrator formats share the toggle rules; validate as SVG.
-        if let Err(e) = opts.validate(ExportFormat::Svg) {
+        // Both Illustrator formats share the toggle rules; they differ only in what color targets
+        // they can carry (CMYK: PDF only).
+        let check = if format == ExportFormat::Pdf { ExportFormat::Pdf } else { ExportFormat::Svg };
+        if let Err(e) = opts.validate(check) {
             plan.blocked_reason = Some(e.message);
             return plan;
         }
@@ -448,7 +461,7 @@ impl IllustratorPlan {
     }
 
     fn finish(&mut self, doc: &Document, notes: Notes) {
-        let opts = self.options;
+        let opts = self.options.clone();
         let mut w = Vec::new();
         let visible: Vec<&LayerPlan> = self.layers.iter().filter(|l| l.treatment.is_visible()).collect();
         self.vector_path_count = visible
@@ -467,8 +480,9 @@ impl IllustratorPlan {
                 )
             } else {
                 format!(
-                    "{} raster-only strokes have no vector form; they are still embedded as sRGB raster images although 'Preserve original appearance' is off.",
-                    self.raster_only_stroke_count
+                    "{} raster-only strokes have no vector form; they are still embedded as {} raster images although 'Preserve original appearance' is off.",
+                    self.raster_only_stroke_count,
+                    if opts.is_cmyk() { "CMYK" } else { "sRGB" }
                 )
             };
             w.push(warn(ExportWarningKind::RasterOnlyStroke, msg, None, self.raster_only_stroke_count));
@@ -601,8 +615,9 @@ impl IllustratorPlan {
                 0,
             ));
         }
-        // Wide-gamut targets report their (format-specific) conversions in `color_warnings`.
-        if !self.doc_is_srgb && !opts.profile.requires_embedding() {
+        // Wide-gamut targets report their (format-specific) conversions in `color_warnings`, CMYK
+        // in its own plan (`crate::cmyk`).
+        if !self.doc_is_srgb && !opts.profile.requires_embedding() && !opts.is_cmyk() {
             w.push(warn(
                 ExportWarningKind::Other,
                 format!(
@@ -613,7 +628,7 @@ impl IllustratorPlan {
                 0,
             ));
         }
-        if !opts.embed_color_profile {
+        if !opts.embed_color_profile && !opts.is_cmyk() {
             w.push(warn(
                 ExportWarningKind::ProfileNotEmbedded,
                 "No ICC profile is embedded; colors are written as sRGB values.",
@@ -759,13 +774,13 @@ impl IllustratorPlan {
         let mut warnings = self.warnings.clone();
         warnings.extend(self.color_warnings(doc, format));
         let color = (!blocked).then(|| ColorOut::new(doc, self));
-        ExportPreflight {
+        let mut pf = ExportPreflight {
             target_profile: self.target_icc().id().semantic_name,
             bit_depth: 8,
             rendering_intent: color.as_ref().and_then(|c| c.intent(format)),
             gamut_clipping_possible: color.as_ref().is_some_and(|c| c.clip_possible()),
             format,
-            options: self.options,
+            options: self.options.clone(),
             blocked_reason: self.blocked_reason.clone(),
             vector_path_count: self.vector_path_count,
             raster_only_stroke_count: self.raster_only_stroke_count,
@@ -775,7 +790,34 @@ impl IllustratorPlan {
             height_px: doc.height(),
             estimated_bytes: if blocked { 0 } else { self.estimate_bytes(doc, format) },
             warnings,
+            total_area_coverage_max: None,
+            cmyk_profile: None,
+        };
+        if !blocked && self.options.is_cmyk() {
+            match crate::cmyk::CmykPlan::new(doc, &self.options, format) {
+                Ok(cp) => {
+                    pf.target_profile = cp.target_name.clone();
+                    pf.rendering_intent = Some(cp.intent_name.clone());
+                    pf.gamut_clipping_possible = true;
+                    pf.cmyk_profile = Some(cp.info.clone());
+                    // Images carry 4 channels instead of 3; the profile is embedded once.
+                    pf.estimated_bytes = pf.estimated_bytes / 3 * 4;
+                    if cp.embed {
+                        pf.estimated_bytes += cp.profile_bytes().len() as u64 / 2;
+                    }
+                    pf.warnings.extend(cp.warnings.iter().cloned());
+                    let (tac, w) = cp.preflight_warnings(doc);
+                    pf.total_area_coverage_max = tac;
+                    pf.warnings.extend(w);
+                    pf.profile = cp.label;
+                }
+                Err(e) => {
+                    pf.blocked_reason = Some(e.message);
+                    pf.estimated_bytes = 0;
+                }
+            }
         }
+        pf
     }
 
     /// Human-readable list of flattened features for the export report.
@@ -1080,6 +1122,84 @@ pub(crate) fn render_run(
     }
     let rect = RectI::new(bounds.x0 + x0 as i32, bounds.y0 + y0 as i32, bounds.x0 + x1 as i32, bounds.y0 + y1 as i32);
     Ok(Some(RunImage { rect, rgba: out }))
+}
+
+/// Composited raster for one visible run in CMYK: 8-bit ink (0 = none, PDF convention), 8-bit
+/// alpha, cropped to non-transparent pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RunImageCmyk {
+    pub rect: RectI,
+    pub cmyk: Vec<u8>,
+    pub alpha: Vec<u8>,
+}
+
+/// [`render_run`] for CMYK output: composite (reference compositor, `layer_filter`), convert each
+/// pixel with `plan` (counted in its statistics) and crop. `None` if fully transparent.
+pub(crate) fn render_run_cmyk(
+    doc: &Document,
+    layers: &[LayerId],
+    plan: &crate::cmyk::CmykPlan,
+    cancel: &CancelToken,
+) -> Result<Option<RunImageCmyk>, VeskraError> {
+    let bounds = run_bounds(doc, layers);
+    if bounds.is_empty() {
+        return Ok(None);
+    }
+    let set: BTreeSet<LayerId> = layers.iter().copied().collect();
+    let filter = |id: LayerId| set.contains(&id);
+    let copts = ComposeOptions { layer_filter: Some(&filter), ..Default::default() };
+    let w = bounds.width() as usize;
+    let h = bounds.height() as usize;
+    let mut cmyk = vec![0u8; veskra_core::limits::checked_buffer_len(bounds.width(), bounds.height(), 4)?];
+    let mut alpha = vec![0u8; veskra_core::limits::checked_buffer_len(bounds.width(), bounds.height(), 1)?];
+    let band = veskra_raster::TILE as i32;
+    let mut buf = Vec::new();
+    let mut y = bounds.y0;
+    while y < bounds.y1 {
+        cancel.check()?;
+        let y1 = (y + band).min(bounds.y1);
+        let r = RectI::new(bounds.x0, y, bounds.x1, y1);
+        let px = composite_rect(doc, r, &copts);
+        if px.len() != r.area() as usize * 4 {
+            return Err(VeskraError::alloc("composite band unavailable"));
+        }
+        plan.convert(&px, &mut buf, true);
+        let off = (y - bounds.y0) as usize * w;
+        for (i, s) in buf.chunks_exact(5).enumerate() {
+            let a8 = convert::u16_to_u8(s[4]);
+            if a8 == 0 {
+                continue;
+            }
+            if let (Some(c), Some(a)) = (cmyk.get_mut((off + i) * 4..(off + i) * 4 + 4), alpha.get_mut(off + i)) {
+                for k in 0..4 {
+                    c[k] = convert::u16_to_u8(s[k]);
+                }
+                *a = a8;
+            }
+        }
+        y = y1;
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
+    for (yy, row) in alpha.chunks_exact(w).enumerate() {
+        if let (Some(f), Some(l)) = (row.iter().position(|&a| a != 0), row.iter().rposition(|&a| a != 0)) {
+            x0 = x0.min(f);
+            x1 = x1.max(l + 1);
+            y0 = y0.min(yy);
+            y1 = yy + 1;
+        }
+    }
+    if x1 <= x0 || y1 <= y0 {
+        return Ok(None);
+    }
+    let cw = x1 - x0;
+    let mut out_c = Vec::with_capacity(cw * (y1 - y0) * 4);
+    let mut out_a = Vec::with_capacity(cw * (y1 - y0));
+    for yy in y0..y1 {
+        out_c.extend_from_slice(&cmyk[(yy * w + x0) * 4..(yy * w + x1) * 4]);
+        out_a.extend_from_slice(&alpha[yy * w + x0..yy * w + x1]);
+    }
+    let rect = RectI::new(bounds.x0 + x0 as i32, bounds.y0 + y0 as i32, bounds.x0 + x1 as i32, bounds.y0 + y1 as i32);
+    Ok(Some(RunImageCmyk { rect, cmyk: out_c, alpha: out_a }))
 }
 
 /// Fill opacity of a stroke path (`color.a × stroke opacity`).

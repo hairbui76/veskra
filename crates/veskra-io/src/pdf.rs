@@ -26,10 +26,23 @@
 //!   **both** image samples and vector fill colors are converted to it (relative colorimetric), so
 //!   the whole page is color-managed in the target space. `bit_depth = 16` is not available:
 //!   images are 8-bit (`BitDepthReduced` warning).
+//! * `profile = cmyk` (ADR-018): **DeviceCMYK + a PDF/X-style output intent**. Images are 8-bit
+//!   `/DeviceCMYK` (ink, 0 = none) with the same `/SMask`s, vector fills use the `k` operator,
+//!   every transparency group (page and layer forms) blends in `/DeviceCMYK`, and — when
+//!   embedding — the catalog gets `/OutputIntents [<< /S /GTS_PDFX … /DestOutputProfile >>]`
+//!   holding the CMYK profile once. Chosen over `/ICCBased` N=4 because print RIPs and Acrobat
+//!   preflight pass DeviceCMYK numbers through unchanged (no CMYK → CMYK re-separation, a 100 % K
+//!   black stays K-only) and Illustrator opens DeviceCMYK objects as editable CMYK colors; the
+//!   output intent still identifies the printing condition. The file is **not** claimed to be
+//!   PDF/X conformant (no `GTS_PDFXVersion`, trim box or trapping key). Untagged CMYK (embedding
+//!   off) writes DeviceCMYK without an output intent and warns.
 
 mod validate;
 
-use crate::plan::{ColorOut, HybridStrategy, IllustratorPlan, VecNode, VisibleItem, render_run, stroke_alpha};
+use crate::cmyk::CmykPlan;
+use crate::plan::{
+    ColorOut, HybridStrategy, IllustratorPlan, VecNode, VisibleItem, render_run, render_run_cmyk, stroke_alpha,
+};
 use crate::{CancelToken, Exporter};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -86,9 +99,13 @@ fn flate(data: &[u8]) -> Vec<u8> {
 
 /// Stream object body: `<< dict /Length n /Filter /FlateDecode >> stream … endstream`.
 fn stream_obj(dict: &str, data: &[u8]) -> Vec<u8> {
-    let z = flate(data);
+    stream_obj_z(dict, &flate(data))
+}
+
+/// [`stream_obj`] for data that is already zlib-compressed.
+fn stream_obj_z(dict: &str, z: &[u8]) -> Vec<u8> {
     let mut v = format!("<< {dict} /Filter /FlateDecode /Length {} >>\nstream\n", z.len()).into_bytes();
-    v.extend_from_slice(&z);
+    v.extend_from_slice(z);
     v.extend_from_slice(b"\nendstream");
     v
 }
@@ -143,6 +160,10 @@ struct PdfWriter<'a> {
     doc: &'a Document,
     plan: &'a IllustratorPlan,
     color: ColorOut,
+    /// CMYK output (DeviceCMYK) instead of RGB.
+    cmyk: Option<&'a CmykPlan>,
+    /// CMYK: vector fill colors outside the CMYK gamut.
+    cmyk_clipped_colors: u32,
     objs: Objects,
     /// Color space object (`[/ICCBased n 0 R]`) when embedding.
     cs: Option<u32>,
@@ -197,8 +218,26 @@ impl PdfWriter<'_> {
             let b = g.outline.bounds();
             bounds = if first { b } else { bounds.union(&b) };
             first = false;
-            let [r, gg, bb] = self.color.target_color(rec.color);
             let alpha = stroke_alpha(rec);
+            if let Some(k) = self.cmyk {
+                let rgb = [rec.color.r, rec.color.g, rec.color.b].map(|v| v as f64);
+                let (c, de) = k.transform.rgb_to_cmyk_with_delta_e(rgb);
+                if de > veskra_color::cmyk::GAMUT_DELTA_E00 {
+                    self.cmyk_clipped_colors = self.cmyk_clipped_colors.saturating_add(1);
+                }
+                s.push_str("q\n");
+                if alpha < 1.0 {
+                    let name = self.gs(alpha, BlendMode::Normal);
+                    s.push_str(&format!("/{name} gs\n"));
+                }
+                let [c, m, y, kk] = c.map(|v| fmt_num(v, 4));
+                s.push_str(&format!("{c} {m} {y} {kk} k\n"));
+                s.push_str(&g.outline.to_pdf_ops(PATH_DECIMALS));
+                s.push_str("f\nQ\n");
+                self.paths += 1;
+                continue;
+            }
+            let [r, gg, bb] = self.color.target_color(rec.color);
             s.push_str("q\n");
             if alpha < 1.0 {
                 let name = self.gs(alpha, BlendMode::Normal);
@@ -233,9 +272,10 @@ impl PdfWriter<'_> {
             s.push_str(&ops);
         } else {
             let gs = self.gs(opacity, blend);
-            let group_cs = match self.cs {
-                Some(c) => format!("{c} 0 R"),
-                None => "/DeviceRGB".into(),
+            let group_cs = match (self.cmyk, self.cs) {
+                (Some(_), _) => "/DeviceCMYK".into(),
+                (None, Some(c)) => format!("{c} 0 R"),
+                (None, None) => "/DeviceRGB".into(),
             };
             let bbox = b.inflate(1.0);
             let dict = format!(
@@ -255,7 +295,40 @@ impl PdfWriter<'_> {
         Ok(s)
     }
 
+    /// DeviceCMYK image XObject for a raster run.
+    fn image_cmyk(&mut self, k: &CmykPlan, layers: &[LayerId], cancel: &CancelToken) -> Result<String, VeskraError> {
+        let Some(img) = render_run_cmyk(self.doc, layers, k, cancel)? else { return Ok(String::new()) };
+        let (w, h) = (img.rect.width(), img.rect.height());
+        cancel.check()?;
+        let smask = if img.alpha.iter().all(|&a| a == 255) {
+            String::new()
+        } else {
+            let d = format!(
+                "/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 8"
+            );
+            format!(" /SMask {} 0 R", self.objs.add(stream_obj(&d, &img.alpha)))
+        };
+        let d = format!(
+            "/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceCMYK /BitsPerComponent 8{smask}"
+        );
+        let n = self.objs.add(stream_obj(&d, &img.cmyk));
+        let name = format!("Im{}", self.xobjects.len());
+        self.xobjects.push((name.clone(), n));
+        self.images += 1;
+        let (s, ph) = (self.scale, self.page_h);
+        Ok(format!(
+            "q {} 0 0 {} {} {} cm /{name} Do Q\n",
+            n6(w as f64 * s),
+            n6(h as f64 * s),
+            n6(img.rect.x0 as f64 * s),
+            n6(ph - img.rect.y1 as f64 * s)
+        ))
+    }
+
     fn image(&mut self, layers: &[LayerId], cancel: &CancelToken) -> Result<String, VeskraError> {
+        if let Some(k) = self.cmyk {
+            return self.image_cmyk(k, layers, cancel);
+        }
         let Some(img) = render_run(self.doc, layers, &self.color, cancel)? else { return Ok(String::new()) };
         let (w, h) = (img.rect.width(), img.rect.height());
         let mut rgb = Vec::with_capacity(img.rgba.len() / 4 * 3);
@@ -304,16 +377,44 @@ impl PdfWriter<'_> {
     }
 }
 
-/// Serialize the plan as PDF. Returns (bytes, paths written, images written, color conversion state).
+/// PDF output written by [`write_pdf`].
+pub(crate) struct WrittenPdf {
+    pub bytes: Vec<u8>,
+    pub paths: u32,
+    pub images: u32,
+    /// RGB color conversion state (clip counts); unused for CMYK.
+    pub color: ColorOut,
+    /// CMYK: vector fill colors outside the CMYK gamut.
+    pub cmyk_clipped_colors: u32,
+}
+
+/// `/OutputIntents` entry for a CMYK export (PDF/X style, profile stream `icc`).
+fn output_intent(k: &CmykPlan, icc: u32) -> String {
+    let desc = pdf_text_string(&k.target_name);
+    if k.info.bundled {
+        format!(
+            "<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /RegistryName (http://www.color.org) /OutputCondition (Offset printing, coated paper, ISO 12647-2, FOGRA39L, 300% TAC) /Info {desc} /DestOutputProfile {icc} 0 R >>"
+        )
+    } else {
+        format!(
+            "<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (Custom) /Info {desc} /DestOutputProfile {icc} 0 R >>"
+        )
+    }
+}
+
+/// Serialize the plan as PDF (RGB, or DeviceCMYK when `cmyk` is given).
 pub(crate) fn write_pdf(
     doc: &Document,
     plan: &IllustratorPlan,
+    cmyk: Option<&CmykPlan>,
     cancel: &CancelToken,
-) -> Result<(Vec<u8>, u32, u32, ColorOut), VeskraError> {
+) -> Result<WrittenPdf, VeskraError> {
     let mut w = PdfWriter {
         doc,
         plan,
         color: ColorOut::new(doc, plan),
+        cmyk,
+        cmyk_clipped_colors: 0,
         objs: Objects::default(),
         cs: None,
         gstates: BTreeMap::new(),
@@ -331,7 +432,18 @@ pub(crate) fn write_pdf(
     let info = w.objs.alloc();
     let page_resources = w.objs.alloc();
     w.form_resources = w.objs.alloc();
-    if plan.options.embed_color_profile {
+    let mut intent_entry = String::new();
+    if let Some(k) = cmyk {
+        if k.embed {
+            let body = if k.info.bundled {
+                stream_obj_z("/N 4", crate::cmyk::bundled_profile_flate())
+            } else {
+                stream_obj("/N 4", k.profile_bytes())
+            };
+            let icc = w.objs.add(body);
+            intent_entry = format!(" /OutputIntents [{}]", output_intent(k, icc));
+        }
+    } else if plan.options.embed_color_profile {
         let target = w.color.target.clone();
         let icc = w.objs.add(stream_obj("/N 3 /Alternate /DeviceRGB", target.bytes()));
         w.cs = Some(w.objs.add(format!("[/ICCBased {icc} 0 R]").into_bytes()));
@@ -439,7 +551,11 @@ pub(crate) fn write_pdf(
     w.objs.set(w.form_resources, format!("<<{cs_entry}{gs_entry} >>").into_bytes());
     w.objs.set(page_resources, format!("<<{cs_entry}{gs_entry}{xo_entry}{props_entry} >>").into_bytes());
     let contents = w.objs.add(stream_obj("", content.as_bytes()));
-    let group_cs = w.cs.map(|c| format!("{c} 0 R")).unwrap_or_else(|| "/DeviceRGB".into());
+    let group_cs = match (cmyk, w.cs) {
+        (Some(_), _) => "/DeviceCMYK".to_string(),
+        (None, Some(c)) => format!("{c} 0 R"),
+        (None, None) => "/DeviceRGB".into(),
+    };
     w.objs.set(
         page,
         format!(
@@ -474,9 +590,9 @@ pub(crate) fn write_pdf(
             refs(&off)
         )
     };
-    w.objs.set(catalog, format!("<< /Type /Catalog /Pages {pages} 0 R{ocprops} >>").into_bytes());
-    let (paths, images) = (w.paths, w.images);
-    Ok((w.objs.finish(catalog, info)?, paths, images, w.color))
+    w.objs.set(catalog, format!("<< /Type /Catalog /Pages {pages} 0 R{ocprops}{intent_entry} >>").into_bytes());
+    let (paths, images, cmyk_clipped_colors) = (w.paths, w.images, w.cmyk_clipped_colors);
+    Ok(WrittenPdf { bytes: w.objs.finish(catalog, info)?, paths, images, color: w.color, cmyk_clipped_colors })
 }
 
 impl Exporter for PdfExporter {
@@ -485,7 +601,7 @@ impl Exporter for PdfExporter {
     }
 
     fn preflight(&self, doc: &Document, opts: &ExportOptions) -> ExportPreflight {
-        IllustratorPlan::build(doc, opts, self.strategy).to_preflight(doc, ExportFormat::Pdf)
+        IllustratorPlan::build_for(doc, opts, self.strategy, ExportFormat::Pdf).to_preflight(doc, ExportFormat::Pdf)
     }
 
     fn export(
@@ -496,14 +612,54 @@ impl Exporter for PdfExporter {
         cancel: &CancelToken,
     ) -> Result<ExportReport, VeskraError> {
         let start = std::time::Instant::now();
-        let plan = IllustratorPlan::build(doc, opts, self.strategy);
+        let plan = IllustratorPlan::build_for(doc, opts, self.strategy, ExportFormat::Pdf);
         if let Some(reason) = &plan.blocked_reason {
-            return Err(VeskraError::new(ErrorCode::InvalidArgument, reason.clone()));
+            let code = match opts.validate(ExportFormat::Pdf) {
+                Err(e) => e.code,
+                Ok(()) => ErrorCode::InvalidArgument,
+            };
+            return Err(VeskraError::new(code, reason.clone()));
         }
-        let (bytes, paths, images, color) = write_pdf(doc, &plan, cancel)?;
+        let cmyk = if opts.is_cmyk() { Some(CmykPlan::new(doc, opts, ExportFormat::Pdf)?) } else { None };
+        let written = write_pdf(doc, &plan, cmyk.as_ref(), cancel)?;
+        let WrittenPdf { bytes, paths, images, color, cmyk_clipped_colors } = written;
         let mut warnings = plan.warnings.clone();
         warnings.extend(plan.color_warnings(doc, ExportFormat::Pdf));
-        warnings.extend(color.clip_warnings());
+        let (profile, target_profile, rendering_intent, out_of_gamut_pixels, tac, cmyk_profile) = match &cmyk {
+            Some(k) => {
+                warnings.extend(k.warnings.iter().cloned());
+                warnings.extend(k.gamut_warning());
+                if cmyk_clipped_colors > 0 {
+                    warnings.push(crate::png::warning(
+                        veskra_core::export::ExportWarningKind::GamutClipped,
+                        format!(
+                            "{cmyk_clipped_colors} vector fill color(s) were outside the CMYK gamut and were mapped into it."
+                        ),
+                        None,
+                        cmyk_clipped_colors,
+                    ));
+                }
+                (
+                    k.label.clone(),
+                    k.target_name.clone(),
+                    Some(k.intent_name.clone()),
+                    k.stats().out_of_gamut,
+                    Some(k.tac()),
+                    Some(k.info.clone()),
+                )
+            }
+            None => {
+                warnings.extend(color.clip_warnings());
+                (
+                    plan.profile_label(ExportFormat::Pdf),
+                    color.target.id().semantic_name,
+                    color.intent(ExportFormat::Pdf),
+                    color.clipped_pixels(),
+                    None,
+                    None,
+                )
+            }
+        };
         cancel.check()?;
         out.write_all(&bytes)
             .and_then(|_| out.flush())
@@ -512,16 +668,18 @@ impl Exporter for PdfExporter {
             success: false,
             file_uri: None,
             format: ExportFormat::Pdf,
-            profile: plan.profile_label(ExportFormat::Pdf),
+            profile,
             profile_embedded: opts.embed_color_profile,
             vector_object_count: paths,
             rasterized_object_count: images,
             flattened_feature_list: plan.flattened_features(),
             warnings,
-            target_profile: color.target.id().semantic_name,
+            target_profile,
             bit_depth: 8,
-            rendering_intent: color.intent(ExportFormat::Pdf),
-            out_of_gamut_pixels: color.clipped_pixels(),
+            rendering_intent,
+            out_of_gamut_pixels,
+            total_area_coverage_max: tac,
+            cmyk_profile,
             duration_ms: start.elapsed().as_millis() as u64,
             file_bytes: bytes.len() as u64,
             width_px: doc.width(),
