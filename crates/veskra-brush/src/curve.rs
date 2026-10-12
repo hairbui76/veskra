@@ -1,4 +1,4 @@
-//! Editable monotone response curves (pressure → size/opacity/flow).
+//! Editable response curves (pressure / tilt / velocity → size, opacity, flow, texture, scatter).
 
 use serde::{Deserialize, Serialize};
 
@@ -7,12 +7,15 @@ use crate::BrushError;
 /// Maximum control points in one curve (bounded input).
 pub const MAX_CURVE_POINTS: usize = 32;
 
-/// Monotone non-decreasing curve `[0,1] → [0,1]` through control points `[x, y]`.
+/// Curve `[0,1] → [0,1]` through control points `[x, y]`.
 ///
-/// Rules (checked by [`ResponseCurve::validate`]): 2..=[`MAX_CURVE_POINTS`] finite points,
-/// first `x = 0`, last `x = 1`, `x` strictly increasing, `y` in `[0,1]` and non-decreasing.
-/// Evaluation is a monotone cubic Hermite interpolant (Fritsch–Butland tangents), so the
-/// curve never overshoots its control points. Serialized as `[[x, y], ...]`.
+/// Shape rules (checked by [`ResponseCurve::validate_shape`]): 2..=[`MAX_CURVE_POINTS`] finite
+/// points, first `x = 0`, last `x = 1`, `x` strictly increasing, `y` in `[0,1]`.
+/// [`ResponseCurve::validate`] additionally requires `y` to be non-decreasing (the schema-1/2
+/// pressure curves); schema-3 dynamics curves may fall as well as rise (e.g. "faster = thinner").
+/// Evaluation is a shape-preserving cubic Hermite interpolant (Fritsch–Butland tangents, zero
+/// slope at local extrema), so the curve never overshoots its control points. Serialized as
+/// `[[x, y], ...]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ResponseCurve {
@@ -60,7 +63,29 @@ impl ResponseCurve {
         &self.points
     }
 
+    /// Shape-preserving curve from control points (may fall as well as rise).
+    pub fn new_shape(points: Vec<[f32; 2]>) -> Result<Self, BrushError> {
+        let c = Self { points };
+        c.validate_shape()?;
+        Ok(c)
+    }
+
+    /// Monotone (non-decreasing) curve rules.
     pub fn validate(&self) -> Result<(), BrushError> {
+        self.validate_shape()?;
+        if self.points.windows(2).any(|w| w[1][1] < w[0][1]) {
+            return Err(BrushError::InvalidPreset("curve: y must be non-decreasing (monotone)".into()));
+        }
+        Ok(())
+    }
+
+    /// True if `y` never decreases.
+    pub fn is_monotone(&self) -> bool {
+        self.points.windows(2).all(|w| w[1][1] >= w[0][1])
+    }
+
+    /// Shape rules without the monotonicity requirement.
+    pub fn validate_shape(&self) -> Result<(), BrushError> {
         let bad = |m: &str| Err(BrushError::InvalidPreset(format!("curve: {m}")));
         let p = &self.points;
         if p.len() < 2 || p.len() > MAX_CURVE_POINTS {
@@ -74,9 +99,6 @@ impl ResponseCurve {
         }
         if p.windows(2).any(|w| w[1][0] <= w[0][0]) {
             return bad("x must be strictly increasing");
-        }
-        if p.windows(2).any(|w| w[1][1] < w[0][1]) {
-            return bad("y must be non-decreasing (monotone)");
         }
         Ok(())
     }
@@ -180,6 +202,27 @@ mod tests {
         let g = ResponseCurve::power(2.0, 9);
         g.validate().unwrap();
         assert!((g.eval(0.5) - 0.25).abs() < 0.01);
+    }
+
+    #[test]
+    fn falling_curves_are_shape_valid_and_do_not_overshoot() {
+        let pts = vec![[0.0, 1.0], [0.3, 0.2], [0.6, 0.9], [1.0, 0.0]];
+        assert!(ResponseCurve::new(pts.clone()).is_err(), "monotone rule rejects a falling curve");
+        let c = ResponseCurve::new_shape(pts).unwrap();
+        assert!(!c.is_monotone());
+        for i in 0..=1000 {
+            let x = i as f32 / 1000.0;
+            let y = c.eval(x);
+            assert!((0.0..=1.0).contains(&y));
+        }
+        // Between 0.3 (0.2) and 0.6 (0.9) the value stays inside [0.2, 0.9].
+        for i in 300..=600 {
+            let y = c.eval(i as f32 / 1000.0);
+            assert!((0.2 - 1e-6..=0.9 + 1e-6).contains(&y), "{i}: {y}");
+        }
+        for p in c.points() {
+            assert!((c.eval(p[0]) - p[1]).abs() < 1e-6);
+        }
     }
 
     #[test]

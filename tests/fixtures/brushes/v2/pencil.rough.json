@@ -1,0 +1,56 @@
+{
+  "schema": 2,
+  "id": "pencil.rough",
+  "version": 1,
+  "name": "Rough pencil",
+  "kind": "pencil",
+  "size_px": 5.0,
+  "min_size_ratio": 0.45,
+  "opacity": 1.0,
+  "flow": 0.9,
+  "spacing": 0.1,
+  "hardness": 0.7,
+  "pressure_size": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_opacity": [
+    [
+      0.0,
+      0.15
+    ],
+    [
+      0.5,
+      0.65
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_flow": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "tilt_size": null,
+  "grain": {
+    "scale": 1.6,
+    "strength": 0.6
+  },
+  "accumulation": "max",
+  "eraser": false,
+  "vector_eligible": false,
+  "stabilization": 0.0
+}

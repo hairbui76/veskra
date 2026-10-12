@@ -33,7 +33,7 @@ silent no-op undo step. `invalidated` is guaranteed to cover every display pixel
 | `layer.rename` | `id`, `name` | |
 | `layer.select` | `id` | UI state, not undoable |
 | `layer.list` | — | `{layers: [...]}` top-most first: id, parent, depth, kind, name, visible, opacity, blend, locked, alphaLocked, clip, passThrough, strokes, hasMask, vectorFidelity (`exact`\|`partially_vector`\|`raster`), active |
-| `brush.list` / `brush.select` / `brush.set` | — / `preset` / `size`?, `opacity`?, `flow`?, `stabilization`? | presets with `vectorEligible` |
+| `brush.list` / `brush.select` / `brush.set` | — / `preset` / `size`?, `opacity`?, `flow`?, `stabilization`? | built-in + library brushes (see *Brush library*); `brush.set` changes the session's copy of the current brush only |
 | `color.set` / `color.get` / `color.pick` | `hex` / — / `x`, `y`, `layer`? | sRGB hex; recent colors |
 | `color.convert` | `hex: "#RRGGBB"` + `to: "cmyk"`, **or** `cmyk: [c,m,y,k]` (each 0..=1) + `to: "srgb"`; `cmykProfile`?: path \| null (bundled), `intent`?: relative_colorimetric (default) \| perceptual, `blackPointCompensation`?: true (default) | to cmyk: `{cmyk: [c,m,y,k] (0..1, 4 decimals), inGamut, profile}`; to srgb: `{hex, clipped, profile}`. Read-only, no document needed, no undo step; see *CMYK* below |
 | `profile.inspect` | `path`?: path \| null (bundled CMYK profile) | `{description, copyright, class, colorSpace, pcs, version, intents, bytes, bundled, usableForCmykExport, reason}`; read-only; see *CMYK* below |
@@ -334,3 +334,143 @@ stroke is live (`InvalidState`).
 rects in `invalidated` / the input-batch result instead of their bounding box (overlapping rects
 are merged; at most 48). Their union covers every changed display pixel (property-tested with all
 tools active).
+
+## Brush library (ADR-019)
+
+Source: `crates/veskra-engine/src/{brushlib.rs,session/brushes.rs}`, `crates/veskra-brush`.
+Tests: `crates/veskra-engine/tests/brush_library.rs`, `crates/veskra-brush/tests/{presets,brush_v2,interop_ip,legacy_regression}.rs`.
+
+Library commands are **not document edits**: they never change the document, `version` or the
+undo history. The app owns the storage directory and calls `brush.library.open` once per session;
+every later change is persisted there (temp file + rename). Commands that need it fail with
+`InvalidState` until then (`brush.list`, `brush.get`, `brush.select`, `brush.preview` work with the
+built-ins without a library). Result `warnings` arrays are human-readable and may be shown as is.
+
+| Command | Fields | Result / notes |
+|---|---|---|
+| `brush.library.open` | `dir` (absolute) | `{dir, brushes, assets, warnings}`. Creates `dir` (and `dir/assets`) if missing, loads `dir/*.vbrush` and `dir/assets/<hash>.png`; unreadable / invalid / duplicate / built-in-id files are skipped and named in `warnings`. Replaces a previously opened library |
+| `brush.list` | — | `{presets: [{id, name, category, source, folder, vectorEligible, eraser, version, editable, current}], current}` — the 30 built-ins in display order, then library brushes sorted by `folder`, `name`, `id`. `editable` = not built-in. `current` (top level) = the session brush: `{id, name, size, opacity, flow, stabilization, vectorEligible, eraser, category, source, version}` |
+| `brush.get` | `id` | `{preset, editable, assets: [{hash, width, height, available}]}`; `preset` is the full schema-3 JSON below |
+| `brush.save` | `preset` (schema-3 object), `assets`? `{ "<key>": "/abs/file.png" \| {"path", "channel"?: auto\|alpha\|luminance\|darkness, "invert"?: bool} }` | `{id, version, vectorEligible, warnings}`. See *Saving* |
+| `brush.asset.add` | `path` (absolute PNG), `channel`? = `auto`, `invert`? = false | `{hash, width, height, channel, downscaledFrom}` — converts the PNG to a coverage mask, stores it as `dir/assets/<hash>.png`; use `hash` as `tip.image` / `texture.image`. `channel` is the one actually used (`auto` resolved); `downscaledFrom` = `[w, h]` when the source was larger than 2048 px, else `null` |
+| `brush.delete` | `id` | `{deleted: id}`; custom / imported only (`InvalidArgument` for a built-in, `NotFound` for an unknown id). A deleted *current* brush stays usable for the rest of the session |
+| `brush.duplicate` | `id`, `name`? (default `"<name> copy"`) | `{id, name, vectorEligible}`; any brush (built-in included) → new `custom` brush, version 1 |
+| `brush.import` | `path` (absolute) | `{imported: [{id, name, folder, approximated, unsupported}], failed: [{name, reason}], warnings}`. See *Import* |
+| `brush.export` | `id`, `path` (must end in `.vbrush`) | `{path, bytes}`; any brush, built-ins included. Never writes `.prbr` |
+| `brush.preview` | `id`, `width` 16..=1024, `height` 16..=256 | `{png, width, height, sizePx, synthetic: true}` — see *Preview* |
+
+**Saving.** `brush.save` is strict: unknown preset fields are `InvalidArgument` (listing them).
+`schema` defaults to 3. `id`: the id of an existing library brush updates it (`version` + 1); an
+empty, unknown or **built-in** id creates a new brush (`custom.<12 hex>`, version 1; built-ins are
+never overwritten, a warning says so). `version` and `vector_eligible` in the input are ignored:
+the engine bumps the version and computes `vectorEligible` with the vector rule (returned in the
+result). `source` is forced to `custom` (an edited imported brush becomes custom); `category`
+defaults to `custom` when missing. Every `tip.image` / `texture.image` must be a known asset hash
+(library, `brush.asset.add`, built-in) or a key of `assets`, whose files are converted and whose
+keys are replaced by the resulting hashes (at most 8 per call); otherwise `NotFound`. Values out of
+range are `InvalidArgument` (the preset is never silently clamped).
+
+**Import.** The format is detected by content, not extension: a ZIP with `brush.json` is a
+`.vbrush`, with `properties.json` an Infinite Painter `.prbr`, with `index.json` or `*.prbr`
+entries a `.przp` pack; anything else is `InvalidArgument`. `.vbrush` keeps its id when free (else
+a new one). `.prbr` lands in folder `Imported`; a `.przp` uses the folder names of its
+`index.json` (empty → the pack file name), listed brushes in index order, then `*.prbr` entries the
+index does not list (warning). Every brush that fails (missing entry, unreadable properties,
+nested archive, …) is listed in `failed` and the others are imported. Infinite Painter brushes get
+`source: imported:infinite_painter`, `category: imported`; their `approximated` /
+`unsupported` lists name every difference (table: `docs/interop/infinite-painter-brushes.md`).
+Limits (typed errors, never a panic): file ≤ 512 MiB (`.przp`) / 64 MiB (`.vbrush`, `.prbr`);
+ZIP entries must have safe relative names (path traversal = `CorruptData`), declared sizes are
+enforced and DEFLATE ratios bounded (zip bombs = `AllocationLimit`); ≤ 500 brushes per pack
+(`AllocationLimit`); `properties.json` / `index.json` ≤ 1 MiB; images ≤ 16 MiB encoded and
+≤ 8192 px per side (> 2048 px is downscaled); archives inside a brush entry are never opened
+(`nested brush archive (depth > 1)`); a library holds ≤ 2000 brushes.
+
+**Preview.** Renders a fixed S-curve across the image with a **synthetic** pressure ramp
+(0.15 → 1 → 0.15, flagged as not hardware-reported, never stored) and 8 ms sample spacing, in
+the current color, brush size capped at 45 % of the height. Erasers erase a light-gray band.
+`png` is base64 (RFC 4648) of an sRGB-tagged PNG holding **straight-alpha** RGBA8 (PNG has no
+premultiplied mode; Android's `BitmapFactory` premultiplies on decode).
+
+**`.vbrush`** (Veskra brush file): ZIP with `mimetype` = `application/x-veskra-brush` (STORE,
+first), `brush.json` (schema-3 preset, pretty JSON) and `assets/<hash>.png` (STORE) for every image
+the preset references, built-in images included, so the file is self-contained. `<hash>` is the
+asset content hash: SHA-256 of `"VSKMASK1"` ‖ width (u32 LE) ‖ height (u32 LE) ‖ mask bytes; readers
+decode the PNG (8-bit grayscale, value = coverage) and verify the hash.
+
+**Documents.** A committed stroke records the asset hashes its brush uses and the document embeds
+their PNGs (`.veskra` schema 2, ADR-019 / `veskra-format` docs), so strokes drawn with custom or
+imported brushes re-render on a device without that brush (`veskra_engine::rerender_stroke`).
+`document.open` warns when an embedded image is damaged (pixels are kept; re-rendering such a
+stroke falls back to a round tip).
+
+### Schema-3 preset JSON
+
+Field names are snake_case (the preset schema, unlike command fields). Angles are degrees,
+counter-clockwise on screen. Missing fields take the defaults in brackets.
+
+| Field | Type / range [default] | Meaning |
+|---|---|---|
+| `schema` | 3 | older schemas (1, 2) load through migration; newer → `UnsupportedSchema` |
+| `id` | `[a-z0-9._-]{1,64}` | stable id |
+| `version` | u32 [1] | content revision (recorded in strokes) |
+| `name` | ≤ 255 bytes, no control chars [""] | |
+| `category` | `pencil\|ink\|marker\|paint\|airbrush\|texture\|effect\|eraser\|smudge\|imported\|custom` [custom] | unknown values load as `custom` |
+| `source` | `builtin\|custom\|imported:<format>` [custom] | |
+| `folder` | ≤ 255 bytes [""] | library grouping |
+| `size_px` | (0, 1000] [10] | diameter at full dynamics |
+| `opacity` | 0..1 [1] | stroke-level opacity |
+| `flow` | (0, 1] [1] | per-dab alpha |
+| `spacing` | 0.005..4 [0.1] | fraction of the current diameter |
+| `tip.shape` | `round\|image` [round] | |
+| `tip.hardness` | 0..1 [1] | round tips |
+| `tip.image` | 64 lowercase hex \| null [null] | asset hash; required for `image`, must be null for `round` |
+| `tip.angle` | −360..360 [0] | |
+| `tip.roundness` | 0.05..1 [1] | height / width |
+| `tip.rotation` | `fixed\|direction\|pen` [fixed] | `direction` adds the stroke direction (0° = moving right); `pen` subtracts the hardware azimuth (0° = pen up), only when reported |
+| `jitter.size`, `.opacity`, `.flow` | 0..1 [0] | per dab: value × (1 − j·u) |
+| `jitter.angle` | 0..1 [0] | per dab: ± j·180° |
+| `jitter.scatter` | 0..4 [0] | per dab: ± j × diameter, perpendicular to the stroke |
+| `jitter.hue`, `.saturation`, `.brightness` | 0..1 [0] | per dab color (hue ± j·180°, others ± j) |
+| `jitter.stroke_hue`, `.stroke_saturation`, `.stroke_brightness` | 0..1 [0] | once per stroke |
+| `texture` | object \| null [null] | |
+| `texture.source` | `procedural\|image` | |
+| `texture.image` | hash \| null | required for `image`, null for `procedural` |
+| `texture.scale` | procedural 0.5..256 (feature px); image 0.05..64 (px per texel) | |
+| `texture.depth` | 0..1 | alpha × (1 − depth · t) |
+| `texture.invert` | bool [false] | |
+| `texture.mode` | `fixed\|follow` [fixed] | document space / moves with the dab |
+| `dynamics.<pressure\|tilt\|velocity>.<size\|opacity\|flow\|texture\|scatter>` | `{enabled [false], curve [[0,0],[1,1]], min [0], max [1]}` | factor = `min + (max − min) · curve(input)`; curve: 2..32 points `[x, y]`, x from 0 to 1 strictly increasing, y in 0..1 (may fall); min/max 0..4. A brand-new preset defaults to `pressure.size` enabled. Inputs: pressure (hardware, else the 0.5 fallback), tilt / (π/2) (skipped for samples without tilt), velocity = smoothed speed / (4 px/ms) |
+| `wet_edges` | 0..1 [0] | stroke interior keeps 1 − 0.75·wet of its coverage, rim keeps all |
+| `accumulation` | `max\|build_up` [max] | |
+| `eraser` | bool [false] | destination-out brush |
+| `vector_eligible` | bool | must satisfy the vector rule (round circular tip, hardness ≥ 0.5, flow 1, `max`, no texture / jitter / wet edges / velocity dynamics, opacity & flow dynamics constant 1, not eraser/airbrush/texture/smudge/effect category); `brush.save` computes it |
+| `stabilization` | 0..1 [0] | |
+
+Example (`brush.get {"id": "paint.round_bristle"}` → `preset`, dynamics shortened):
+
+```json
+{"schema": 3, "id": "paint.round_bristle", "version": 1, "name": "Round bristle", "category": "paint",
+ "source": "builtin", "folder": "", "size_px": 30.0, "opacity": 1.0, "flow": 0.9, "spacing": 0.03,
+ "tip": {"shape": "image", "hardness": 1.0, "image": "06adf5f8e0234b2d5685197756e399944744f8976d49944f99877c9d3344fc64",
+         "angle": 0.0, "roundness": 1.0, "rotation": "direction"},
+ "jitter": {"size": 0.05, "angle": 0.0, "opacity": 0.0, "flow": 0.0, "scatter": 0.0, "hue": 0.0, "saturation": 0.0,
+            "brightness": 0.0, "stroke_hue": 0.01, "stroke_saturation": 0.0, "stroke_brightness": 0.04},
+ "texture": null,
+ "dynamics": {"pressure": {"size": {"enabled": true, "curve": [[0.0, 0.0], [1.0, 1.0]], "min": 0.4, "max": 1.0},
+                           "flow": {"enabled": true, "curve": [[0.0, 0.0], [1.0, 1.0]], "min": 0.35, "max": 1.0},
+                           "opacity": {"enabled": false, "curve": [[0.0, 0.0], [1.0, 1.0]], "min": 0.0, "max": 1.0},
+                           "texture": {"enabled": false, "curve": [[0.0, 0.0], [1.0, 1.0]], "min": 0.0, "max": 1.0},
+                           "scatter": {"enabled": false, "curve": [[0.0, 0.0], [1.0, 1.0]], "min": 0.0, "max": 1.0}},
+              "tilt": {"…": "same five targets, all disabled"}, "velocity": {"…": "same five targets, all disabled"}},
+ "wet_edges": 0.0, "accumulation": "max", "eraser": false, "vector_eligible": false, "stabilization": 0.0}
+```
+
+(The engine always emits all fields; JSON object key order is not significant.)
+
+**Errors** (all typed, nothing changes on failure): `InvalidState` (no library open),
+`InvalidArgument` (bad preset field / range / unknown field, not a brush file, wrong export
+extension, preview size, built-in delete, nested archive), `NotFound` (unknown id or asset hash,
+missing file), `CorruptData` (broken archive or PNG, hash mismatch, unsafe entry name),
+`AllocationLimit` (size / count limits above), `UnsupportedSchema` (preset schema > 3),
+`Io` / `FilePermissionDenied` / `StorageFull` (file system).

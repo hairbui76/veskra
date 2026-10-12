@@ -26,3 +26,4 @@ Such ADRs stay provisional until QAP attaches that evidence; they must not be ci
 | [016](ADR-016-core-contracts.md) | Frozen core contracts (ARC-01) | Accepted |
 | [017](ADR-017-tool-set-and-export-color.md) | Painter tool set and export color targets (amends 013 for export) | Accepted (provisional) |
 | [018](ADR-018-cmyk-output.md) | CMYK output: LUT output profiles, PSD/PDF CMYK export, CMYK picker (amends 006, 017) | Accepted (provisional) |
+| [019](ADR-019-brush-system-v2.md) | Brush system v2: schema-3 presets, brush assets, library, Infinite Painter import (amends 004, 009) | Accepted (provisional) |

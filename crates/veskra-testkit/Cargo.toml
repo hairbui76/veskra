@@ -12,6 +12,7 @@ veskra-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 png.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

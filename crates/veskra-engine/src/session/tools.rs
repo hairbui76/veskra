@@ -253,7 +253,7 @@ impl Session {
 
         let eraser = tool == ToolKind::Eraser || self.brush.eraser;
         let mut preset = if eraser && !self.brush.eraser {
-            self.presets.iter().find(|p| p.id == "eraser.hard").cloned().unwrap_or_else(|| self.brush.clone())
+            veskra_brush::builtin_preset("eraser.hard").unwrap_or_else(|| self.brush.clone())
         } else {
             self.brush.clone()
         };
@@ -287,9 +287,20 @@ impl Session {
             ..Default::default()
         };
         // One renderer per stroke of the gesture. Replicas share the seed, so document-space
-        // grain is the same texture field for all of them.
+        // grain (and jitter) is the same field for all of them. Image tips / textures come from
+        // the library or the built-ins (ADR-019).
+        let assets = self.library.resolve(&preset);
         let parts: Vec<StrokeRenderer> = (0..=replicas.len())
-            .map(|_| StrokeRenderer::begin(preset.clone(), self.color, seed, base.clone(), ctx.clone()))
+            .map(|_| {
+                StrokeRenderer::begin_resolved(
+                    preset.clone(),
+                    assets.clone(),
+                    self.color,
+                    seed,
+                    base.clone(),
+                    ctx.clone(),
+                )
+            })
             .collect();
         self.live = Some(LiveStroke {
             layer: layer_id,
@@ -502,6 +513,15 @@ impl Session {
         let mut next = (*before).clone();
         let profile = next.color.profile.clone();
         let brush_params = serde_json::to_string(&preset).map_err(internal)?;
+        // Embed the images this brush uses so the strokes re-render without the library
+        // (ADR-019). An image the session could not resolve stays a reference (the stroke was
+        // drawn with the documented fallback, which is also what a re-render will use).
+        let asset_refs = preset.asset_refs();
+        for h in &asset_refs {
+            if let Some(a) = self.library.find_asset(h) {
+                next.insert_brush_asset(h, a.png_bytes().clone())?;
+            }
+        }
         next.pixels_mut_editable(layer)?.tiles = tiles;
         if let Some(reason) = raster_edit {
             next.mark_raster_edit(layer, reason)?;
@@ -543,7 +563,8 @@ impl Session {
                 preset.vector_eligible && mode == StrokeMode::Paint,
                 geometry,
                 f.bounds,
-            )?;
+            )?
+            .with_brush_assets(asset_refs.clone())?;
             next.add_stroke(rec)?;
             ids.push(stroke_id.to_string());
         }

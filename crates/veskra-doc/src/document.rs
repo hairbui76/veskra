@@ -105,6 +105,12 @@ pub struct DocumentParts {
     pub active_layer: Option<LayerId>,
 }
 
+/// Largest embedded brush asset (encoded PNG bytes).
+pub const MAX_BRUSH_ASSET_BYTES: usize = 16 * 1024 * 1024;
+/// Most brush assets one document may embed.
+pub const MAX_DOCUMENT_BRUSH_ASSETS: usize = 4096;
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub id: DocumentId,
@@ -118,6 +124,9 @@ pub struct Document {
     pub selection: Option<MaskGrid>,
     /// Layer the user is painting on.
     pub active_layer: Option<LayerId>,
+    /// Embedded brush assets by content hash (canonical PNG carriers, opaque to the document;
+    /// decoded and verified by `veskra-brush`). See [`Document::insert_brush_asset`].
+    brush_assets: BTreeMap<String, Arc<[u8]>>,
 }
 
 impl Document {
@@ -139,6 +148,7 @@ impl Document {
             strokes: BTreeMap::new(),
             selection: None,
             active_layer: None,
+            brush_assets: BTreeMap::new(),
         })
     }
 
@@ -693,6 +703,49 @@ impl Document {
             selection: self.selection.clone(),
             active_layer: self.active_layer,
         }
+    }
+
+    // ---------- brush assets (ADR-019) ----------
+
+    /// Embed a brush asset (PNG bytes) under its content hash. The hash must be 64 lowercase hex
+    /// characters, the bytes a PNG of at most [`MAX_BRUSH_ASSET_BYTES`], and the document may hold
+    /// at most [`MAX_DOCUMENT_BRUSH_ASSETS`]. Re-inserting a known hash keeps the first bytes.
+    /// The document does not decode the PNG: `veskra-brush` verifies that the mask matches the
+    /// hash when it renders with it.
+    pub fn insert_brush_asset(&mut self, hash: &str, png: Arc<[u8]>) -> Result<(), VeskraError> {
+        if !crate::stroke::is_asset_hash(hash) {
+            return Err(VeskraError::invalid("brush asset hash must be 64 lowercase hex characters"));
+        }
+        if png.len() > MAX_BRUSH_ASSET_BYTES {
+            return Err(VeskraError::alloc("brush asset exceeds the size limit"));
+        }
+        if !png.starts_with(&PNG_SIGNATURE) {
+            return Err(VeskraError::new(ErrorCode::CorruptData, "brush asset is not a PNG"));
+        }
+        if self.brush_assets.contains_key(hash) {
+            return Ok(());
+        }
+        if self.brush_assets.len() >= MAX_DOCUMENT_BRUSH_ASSETS {
+            return Err(VeskraError::alloc("too many brush assets in the document"));
+        }
+        self.brush_assets.insert(hash.to_string(), png);
+        Ok(())
+    }
+
+    /// Embedded brush asset by content hash.
+    pub fn brush_asset(&self, hash: &str) -> Option<&Arc<[u8]>> {
+        self.brush_assets.get(hash)
+    }
+
+    /// All embedded brush assets (hash order).
+    pub fn iter_brush_assets(&self) -> impl Iterator<Item = (&String, &Arc<[u8]>)> {
+        self.brush_assets.iter()
+    }
+
+    /// Hashes referenced by the document's strokes (sorted). An embedded asset no stroke
+    /// references (e.g. after deleting a layer) is not written on save.
+    pub fn referenced_brush_assets(&self) -> BTreeSet<&str> {
+        self.strokes.values().flat_map(|s| s.brush_assets.iter().map(String::as_str)).collect()
     }
 
     /// Bytes of pixel tiles in this document (all layers).

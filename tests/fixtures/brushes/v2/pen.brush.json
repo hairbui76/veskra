@@ -1,0 +1,77 @@
+{
+  "schema": 2,
+  "id": "pen.brush",
+  "version": 1,
+  "name": "Brush pen",
+  "kind": "pen",
+  "size_px": 12.0,
+  "min_size_ratio": 0.06,
+  "opacity": 1.0,
+  "flow": 1.0,
+  "spacing": 0.05,
+  "hardness": 0.95,
+  "pressure_size": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.125,
+      0.035896823
+    ],
+    [
+      0.25,
+      0.108818814
+    ],
+    [
+      0.375,
+      0.20818529
+    ],
+    [
+      0.5,
+      0.32987696
+    ],
+    [
+      0.625,
+      0.47142002
+    ],
+    [
+      0.75,
+      0.63109976
+    ],
+    [
+      0.875,
+      0.80763084
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_opacity": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_flow": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "tilt_size": null,
+  "grain": null,
+  "accumulation": "max",
+  "eraser": false,
+  "vector_eligible": true,
+  "stabilization": 0.1
+}

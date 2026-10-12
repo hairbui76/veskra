@@ -101,6 +101,9 @@ pub enum FormatWarning {
     UnknownEntries { names: Vec<String> },
     /// The bundle was migrated from an older schema on load.
     Migrated { from: u32, to: u32 },
+    /// Strokes reference brush assets the bundle does not embed (`count` distinct hashes). The
+    /// pixels are complete; re-rendering those strokes falls back to a round tip.
+    MissingBrushAssets { count: usize },
 }
 
 impl fmt::Display for FormatWarning {
@@ -114,6 +117,10 @@ impl fmt::Display for FormatWarning {
             }
             FormatWarning::UnknownEntries { names } => write!(f, "{} unknown entr(ies) ignored", names.len()),
             FormatWarning::Migrated { from, to } => write!(f, "migrated from schema {from} to {to}"),
+            FormatWarning::MissingBrushAssets { count } => write!(
+                f,
+                "{count} brush image(s) used by strokes are not embedded; their pixels are kept but the strokes cannot be re-rendered exactly"
+            ),
         }
     }
 }

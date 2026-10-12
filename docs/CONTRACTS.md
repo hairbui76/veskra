@@ -226,3 +226,36 @@ Packed event layout per event `i`: `ints[i*5 .. i*5+5] = [action, pointerId, too
 tilt, orientation, touchMajor, touchMinor, reserved]` (NaN = axis not reported);
 `longs[i] = eventTimeNanos`. `action`/`toolType` use Android `MotionEvent` constant values.
 Return flags: bit0 canvas dirty, bit1 view changed, bit2 stroke committed, bit3 history changed.
+
+## 9. Brush system v2 (BRH / FMT, ADR-019) — amendment of 2026-10-12
+
+Cross-crate changes; rustdoc is normative.
+
+* **`veskra-brush`** — preset schema 3 (`docs/COMMANDS.md` "Schema-3 preset JSON").
+  `BrushPreset` now has `category: BrushCategory`, `source: BrushSource`, `folder`, `tip: Tip`,
+  `jitter: Jitter`, `texture: Option<Texture>`, `dynamics: Dynamics`, `wet_edges`, and keeps
+  `schema, id, version, name, size_px, opacity, flow, spacing, accumulation, eraser,
+  vector_eligible, stabilization`. **Not additive:** the flat schema-2 Rust fields (`kind`,
+  `hardness`, `min_size_ratio`, `pressure_size/opacity/flow`, `tilt_size`, `grain`) and the types
+  `BrushKind`, `TiltSize`, `Grain` were removed from the Rust API (their JSON still loads through
+  migration; no other crate used them). Additive: `asset::{BrushAsset, AssetStore, ResolvedAssets,
+  MaskChannel, ImportedMask, mask_hash}`, `StrokeRenderer::begin_resolved(preset, assets, color,
+  seed, base, ctx)` and `asset_fallbacks()`, `builtin_assets()`, `builtin_asset_hash()`,
+  `BUILTIN_IDS` (now 30), `LEGACY_BUILTIN_IDS`, `load_preset_value`, `DabInput`,
+  `BrushPreset::{dab_diameter, dab_alpha_at, asset_refs, to_json_compact}`,
+  `ResponseCurve::{new_shape, validate_shape, is_monotone}`, `interop::infinite_painter`,
+  `BrushError::{InvalidAsset, AssetTooLarge, MissingAsset}`. `StrokeRenderer::begin` keeps its
+  signature (resolves built-in assets only). Determinism contract unchanged: identical
+  (samples, preset, assets, color, seed, context) → identical pixels on one platform; schema-2-only
+  presets are byte-identical to the pre-v2 engine.
+* **`veskra-doc`** — additive: `StrokeRecord::brush_assets: Vec<String>` (+
+  `with_brush_assets`), `Document::{insert_brush_asset, brush_asset, iter_brush_assets,
+  referenced_brush_assets}`, `MAX_BRUSH_ASSET_BYTES`, `MAX_DOCUMENT_BRUSH_ASSETS`,
+  `MAX_STROKE_BRUSH_ASSETS`. `DocumentParts` is unchanged (assets are inserted after
+  `from_parts`; `to_parts` does not carry them).
+* **`veskra-format`** — `CURRENT_SCHEMA` = 2 (schemas 1..=2 read natively, `MIN_NATIVE_SCHEMA`
+  = 1); the writer emits schema 2 only for documents with brush assets. Additive:
+  `FormatWarning::MissingBrushAssets`, `zip::ZipPolicy` + `ZipReader::parse_with`
+  (`ZipReader::parse` = `ZipPolicy::BUNDLE`, unchanged behaviour).
+* **`veskra-engine`** — additive: `brushlib` module (library, `.vbrush` codec), the brush-library
+  commands, `rerender_stroke(doc, record, base)`.

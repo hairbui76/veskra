@@ -1,0 +1,49 @@
+{
+  "schema": 2,
+  "id": "eraser.hard",
+  "version": 1,
+  "name": "Hard eraser",
+  "kind": "eraser",
+  "size_px": 20.0,
+  "min_size_ratio": 0.6,
+  "opacity": 1.0,
+  "flow": 1.0,
+  "spacing": 0.08,
+  "hardness": 1.0,
+  "pressure_size": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_opacity": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_flow": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "tilt_size": null,
+  "grain": null,
+  "accumulation": "max",
+  "eraser": true,
+  "vector_eligible": false,
+  "stabilization": 0.0
+}
