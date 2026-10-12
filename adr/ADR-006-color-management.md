@@ -32,6 +32,11 @@ identity bit-exact (COL-002); generated ICC files open in LittleCMS. Results: `d
 ## Consequences
 CMYK/LUT profile import is a P8 item (NEXT-03) needing either a LUT evaluator or lcms2.
 
+## Amendment
+2026-10-12: ADR-018 adds LUT-based CMYK **output** profiles (`mft1`/`mft2`/`mAB`/`mBA`) for
+export and color conversion, with a bundled FOGRA39 profile. Working/document profiles remain
+matrix/TRC RGB or Gray; LUT-only profiles are still rejected as working profiles.
+
 ## Rollback / fallback
 Swap the transform backend for lcms2 behind `RgbTransform` if broader profile support is required.
 
