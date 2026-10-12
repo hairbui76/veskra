@@ -10,6 +10,31 @@ pub(crate) struct PathPt {
     pub y: f64,
     pub pressure: f32,
     pub tilt: Option<f32>,
+    /// Hardware azimuth (document frame, veskra-input convention), if reported.
+    pub azimuth: Option<f32>,
+    /// Smoothed pen speed input `0..=1`.
+    pub velocity: f32,
+    /// Unit direction of the path segment a dab was placed on (set by [`Walker`]).
+    pub dir: Option<[f64; 2]>,
+}
+
+impl PathPt {
+    /// A point with only position and pressure (shapes of tests, smudge).
+    pub(crate) fn at(x: f64, y: f64, pressure: f32, tilt: Option<f32>) -> PathPt {
+        PathPt { x, y, pressure, tilt, azimuth: None, velocity: 0.0, dir: None }
+    }
+}
+
+/// Shortest-arc interpolation of two angles in radians.
+fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
+    let tau = std::f32::consts::TAU;
+    let mut d = (b - a) % tau;
+    if d > std::f32::consts::PI {
+        d -= tau;
+    } else if d < -std::f32::consts::PI {
+        d += tau;
+    }
+    a + d * t
 }
 
 impl PathPt {
@@ -31,6 +56,12 @@ impl PathPt {
                 (Some(a), Some(b)) => Some(a + (b - a) * tf),
                 _ => None,
             },
+            azimuth: match (self.azimuth, o.azimuth) {
+                (Some(a), Some(b)) => Some(lerp_angle(a, b, tf)),
+                _ => None,
+            },
+            velocity: self.velocity + (o.velocity - self.velocity) * tf,
+            dir: None,
         }
     }
 }
@@ -92,6 +123,8 @@ pub(crate) struct Walker {
     /// Highest-pressure point seen while the path has zero length (tap that presses harder).
     tap_peak: Option<PathPt>,
     first_pressure: f32,
+    /// Direction of the last non-degenerate segment.
+    last_dir: Option<[f64; 2]>,
 }
 
 impl Walker {
@@ -112,10 +145,13 @@ impl Walker {
             self.last = Some(p);
             return;
         }
+        let dir = [(p.x - a.x) / seg, (p.y - a.y) / seg];
+        self.last_dir = Some(dir);
         let mut s = 0.0;
         while s + self.to_next <= seg {
             s += self.to_next;
-            let q = a.lerp(&p, s / seg);
+            let mut q = a.lerp(&p, s / seg);
+            q.dir = Some(dir);
             emit(q);
             self.since_dab = 0.0;
             self.to_next = step(&q);
@@ -138,7 +174,7 @@ impl Walker {
         if let Some(l) = self.last
             && self.since_dab > 1e-6
         {
-            emit(l);
+            emit(PathPt { dir: self.last_dir, ..l });
             self.since_dab = 0.0;
         }
     }
@@ -149,7 +185,7 @@ mod tests {
     use super::*;
 
     fn pt(x: f64, y: f64) -> PathPt {
-        PathPt { x, y, pressure: 1.0, tilt: None }
+        PathPt::at(x, y, 1.0, None)
     }
 
     #[test]

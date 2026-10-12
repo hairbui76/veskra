@@ -16,9 +16,9 @@
 use veskra_core::{RectF, RectI};
 use veskra_raster::TileGrid;
 
+use crate::Accumulation;
 use crate::coverage::{CoverageGrid, T};
-use crate::noise::grain_factor;
-use crate::{Accumulation, Grain};
+use crate::noise::{Grain, grain_factor};
 
 /// Minimum rendered radius; smaller dabs fade instead (area conservation).
 pub(crate) const MIN_RADIUS: f64 = 0.5;

@@ -210,7 +210,7 @@ impl SmudgeStroke {
         hd.accepted += 1;
         // Hardware pressure scales the deposit; without it the factor is exactly 1.
         let pressure = if s.flags.contains(SampleFlags::PRESSURE_REPORTED) { s.pressure } else { 1.0 };
-        let sp = hd.stab.push(PathPt { x: f64::from(s.x), y: f64::from(s.y), pressure, tilt: None });
+        let sp = hd.stab.push(PathPt::at(f64::from(s.x), f64::from(s.y), pressure, None));
         let step = self.step;
         let mut pts = Vec::new();
         hd.walker.push(sp, &|_: &PathPt| step, &mut |q| pts.push(q));

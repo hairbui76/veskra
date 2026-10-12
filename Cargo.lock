@@ -494,8 +494,10 @@ dependencies = [
 name = "veskra-brush"
 version = "0.1.0"
 dependencies = [
+ "png",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "veskra-color",
  "veskra-core",

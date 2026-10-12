@@ -1,10 +1,17 @@
-//! Seeded procedural value noise in document space (grain for pencil/charcoal).
+//! Seeded procedural value noise (procedural texture / schema-2 "grain").
 //! Pure integer hashing + `f64` interpolation: deterministic for identical inputs.
 
-use crate::Grain;
+/// Procedural grain parameters as the legacy rasterizer consumes them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Grain {
+    /// Feature size in document px.
+    pub scale: f32,
+    /// `0..=1`; dab alpha is multiplied by `1 − strength · noise'`.
+    pub strength: f32,
+}
 
 #[inline]
-fn splitmix64(mut z: u64) -> u64 {
+pub(crate) fn splitmix64(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -38,13 +45,25 @@ pub(crate) fn value_noise(x: f64, y: f64, scale: f64, seed: u64) -> f64 {
     top + (bot - top) * ty
 }
 
+/// Grain value `n` in `[0, 1]` at `(x, y)`: two octaves (`scale`, `scale/2`), contrast-stretched
+/// around 0.5.
+#[inline]
+pub(crate) fn grain_noise(x: f64, y: f64, scale: f64, seed: u64) -> f64 {
+    let n = 0.65 * value_noise(x, y, scale, seed) + 0.35 * value_noise(x, y, scale * 0.5, seed ^ 0xA5A5_5A5A_C3C3_3C3C);
+    ((n - 0.5) * 1.8 + 0.5).clamp(0.0, 1.0)
+}
+
 /// Grain multiplier in `[1 − strength, 1]` at document pixel center `(x, y)`.
-/// Two octaves (`scale`, `scale/2`), contrast-stretched around 0.5.
 pub(crate) fn grain_factor(x: f64, y: f64, g: &Grain, seed: u64) -> f32 {
-    let s = g.scale as f64;
-    let n = 0.65 * value_noise(x, y, s, seed) + 0.35 * value_noise(x, y, s * 0.5, seed ^ 0xA5A5_5A5A_C3C3_3C3C);
-    let n = ((n - 0.5) * 1.8 + 0.5).clamp(0.0, 1.0);
+    let n = grain_noise(x, y, g.scale as f64, seed);
     (1.0 - g.strength as f64 * n) as f32
+}
+
+/// Deterministic uniform value in `[0, 1)` for (seed, dab index, channel).
+#[inline]
+pub(crate) fn rand01(seed: u64, index: u64, channel: u64) -> f64 {
+    let h = splitmix64(seed ^ splitmix64(index.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ channel.rotate_left(17)));
+    (h >> 11) as f64 / (1u64 << 53) as f64
 }
 
 #[cfg(test)]
