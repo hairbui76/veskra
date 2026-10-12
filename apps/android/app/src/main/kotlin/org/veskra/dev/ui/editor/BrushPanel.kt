@@ -133,6 +133,9 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PanelLabel(stringResource(if (erasers) R.string.brush_group_erasers else R.string.brush_sheet_title), Modifier.weight(1f))
+                TextButton(onClick = { vm.openBrushEditor(state.brush) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.brush_new))
+                }
                 OutlinedButton(onClick = { import.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Icon(VeskraIcons.Add, contentDescription = null)
                     Text(stringResource(R.string.brush_import), modifier = Modifier.padding(start = 6.dp))
@@ -215,6 +218,10 @@ private fun BrushCard(
                     Icon(VeskraIcons.More, contentDescription = null)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (brush.editable) R.string.brush_edit else R.string.brush_edit_copy)) },
+                        onClick = { menu = false; vm.openBrushEditor(brush) },
+                    )
                     DropdownMenuItem(text = { Text(stringResource(R.string.brush_duplicate)) }, onClick = { menu = false; vm.duplicateBrush(brush) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.brush_export)) }, onClick = { menu = false; onExport() })
                     if (brush.editable) {

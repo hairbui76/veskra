@@ -156,6 +156,7 @@ fun EditorScreen(state: UiState, vm: VeskraViewModel) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
         if (state.sheet == EditorSheet.EXPORT) state.export?.let { ExportSheet(it, state, vm) }
+        state.brushEditor?.let { BrushEditor(it, vm) }
         if (state.textDialog) {
             TextDialog(state.doc?.height ?: 2048, onDismiss = { vm.showTextDialog(false) }, onAdd = vm::addText)
         }

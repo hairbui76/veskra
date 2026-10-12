@@ -34,6 +34,7 @@ import org.veskra.kit.BlendMode
 import org.veskra.kit.BrushFiles
 import org.veskra.kit.BrushImportReport
 import org.veskra.kit.BrushInfo
+import org.veskra.kit.with
 import org.veskra.kit.CanvasSpec
 import org.veskra.kit.Commands
 import org.veskra.kit.CopyFailedException
@@ -49,6 +50,7 @@ import org.veskra.kit.HexColor
 import org.veskra.kit.JsonArray
 import org.veskra.kit.JsonNumber
 import org.veskra.kit.JsonObject
+import org.veskra.kit.JsonString
 import org.veskra.kit.JsonValue
 import org.veskra.kit.LayerInfo
 import org.veskra.kit.LayerKind
@@ -96,6 +98,20 @@ enum class Tool {
      */
     val hasPreview: Boolean get() = this == TRANSFORM || this == DISTORT || this == ADJUST || this == CURVES
 }
+
+/**
+ * Brush editor session: [preset] is the engine's schema-3 JSON for brush [id], edited in place
+ * (unknown fields are kept). [version] is the last saved version (drives the preview), [saving]
+ * marks unsaved edits, [vectorEligible] is what the engine concluded on the last save.
+ */
+data class BrushEditorState(
+    val id: String,
+    val preset: JsonObject,
+    val version: Int,
+    val vectorEligible: Boolean,
+    val saving: Boolean = false,
+    val warnings: List<String> = emptyList(),
+)
 
 /** Mirror modes of `symmetry.set`. */
 enum class SymmetryMode(val wire: String) {
@@ -182,6 +198,8 @@ data class UiState(
     val brush: BrushInfo = BrushInfo.FALLBACK,
     /** Everything `brush.list` offers: built-in, custom and imported brushes. */
     val brushes: List<BrushInfo> = emptyList(),
+    /** The brush being edited (full-screen editor), or null. */
+    val brushEditor: BrushEditorState? = null,
     /** Result of the last brush import, shown until dismissed. */
     val brushImport: BrushImportReport? = null,
     val brushSize: Float = 8f,
@@ -1310,6 +1328,117 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissBrushImport() = _ui.update { it.copy(brushImport = null) }
 
+    // ---------------------------------------------------------------- brush editor
+
+    /** Built-in brushes are never changed: editing one edits a copy of it. */
+    fun openBrushEditor(b: BrushInfo) {
+        viewModelScope.launch {
+            val id = if (b.editable) {
+                b.id
+            } else {
+                (exec(Commands.brushDuplicate(b.id, str(R.string.brush_copy_name, b.name)), redraw = false) as? JsonObject)?.string("id") ?: return@launch
+            }
+            val preset = (query(Commands.brushGet(id)) as JsonObject?)?.let { it.obj("preset") ?: it } ?: run {
+                show(R.string.brush_editor_unavailable)
+                return@launch
+            }
+            refreshBrushes()
+            _ui.update {
+                it.copy(
+                    sheet = null,
+                    brushEditor = BrushEditorState(id, preset, preset.int("version") ?: 1, preset.bool("vector_eligible") ?: false),
+                )
+            }
+            _ui.value.brushes.firstOrNull { it.id == id }?.let(::selectBrush)
+        }
+    }
+
+    private var editorSave: Job? = null
+
+    /** One edit from the editor; saved after a short pause so a slider drag is a single save. */
+    fun editBrush(change: (JsonObject) -> JsonObject) {
+        val ed = _ui.value.brushEditor ?: return
+        _ui.update { it.copy(brushEditor = ed.copy(preset = change(ed.preset), saving = true)) }
+        editorSave?.cancel()
+        editorSave = viewModelScope.launch {
+            delay(EDITOR_SAVE_DELAY_MS)
+            saveEditedBrush()
+        }
+    }
+
+    private suspend fun saveEditedBrush() {
+        val ed = _ui.value.brushEditor ?: return
+        val r = onEngine { s -> s.execute(Commands.brushSave(ed.preset)) } ?: return
+        when (r) {
+            is EngineResult.Ok -> {
+                val o = r.value as? JsonObject
+                _ui.update { st ->
+                    val cur = st.brushEditor ?: return@update st
+                    st.copy(
+                        brushEditor = cur.copy(
+                            version = o?.int("version") ?: cur.version + 1,
+                            vectorEligible = o?.bool("vectorEligible") ?: cur.vectorEligible,
+                            saving = cur.preset != ed.preset, // edits made while saving are still pending
+                            warnings = o?.array("warnings")?.items.orEmpty().mapNotNull { (it as? JsonString)?.value },
+                        ),
+                    )
+                }
+                // The engine keeps using the old revision until the brush is selected again.
+                command(Commands.brushSelect(ed.id), redraw = false)
+            }
+            is EngineResult.Err -> _ui.update { st -> st.copy(brushEditor = st.brushEditor?.copy(saving = false, warnings = listOf(r.error.message))) }
+        }
+    }
+
+    fun closeBrushEditor() {
+        viewModelScope.launch {
+            editorSave?.cancel()
+            if (_ui.value.brushEditor?.saving == true) saveEditedBrush()
+            _ui.update { it.copy(brushEditor = null) }
+            refreshBrushes()
+        }
+    }
+
+    /** Thumbnail of the brush as currently saved in the editor. */
+    suspend fun editorPreview(width: Int, height: Int): android.graphics.Bitmap? {
+        val ed = _ui.value.brushEditor ?: return null
+        val info = BrushInfo(ed.id, "", "custom", "custom", null, ed.vectorEligible, false, ed.version, true)
+        return brushPreview(info, width, height)
+    }
+
+    /** Picks an image as the tip (`"tip"`) or the texture (`"texture"`) of the edited brush. */
+    fun importBrushImage(uri: Uri, target: String) {
+        viewModelScope.launch {
+            val staged = withContext(Dispatchers.IO) {
+                try {
+                    store.stageImageAsPng(uri)
+                } catch (e: IOException) {
+                    null
+                }
+            }
+            if (staged == null) {
+                show(R.string.import_failed)
+                return@launch
+            }
+            val hash = try {
+                query(Commands.brushAssetAdd(staged.absolutePath))?.string("hash")
+            } finally {
+                withContext(Dispatchers.IO) { staged.delete() }
+            }
+            if (hash == null) {
+                show(R.string.import_failed)
+                return@launch
+            }
+            editBrush { p ->
+                if (target == "tip") {
+                    p.with("image", "tip", "shape").with(hash, "tip", "image")
+                } else {
+                    p.with("image", "texture", "source").with(hash, "texture", "image")
+                }
+            }
+        }
+    }
+
     fun duplicateBrush(b: BrushInfo) {
         viewModelScope.launch {
             exec(Commands.brushDuplicate(b.id, str(R.string.brush_copy_name, b.name)), redraw = false)
@@ -1477,6 +1606,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         private const val MIN_ZOOM = 0.02f
         private const val MAX_PATH_POINTS = 2000
         private const val MAX_BRUSH_IMPORT_BYTES = 256L * 1024 * 1024
+        private const val EDITOR_SAVE_DELAY_MS = 350L
         private const val CROP_ZOOM_OUT = 0.8f
         private const val MAX_ZOOM = 64f
 

@@ -106,6 +106,9 @@ object Commands {
 
     fun brushDelete(id: String): JsonObject = json { "cmd" to "brush.delete"; "id" to id }
 
+    /** Stores a PNG as a tip / texture asset; result `{hash, width, height}` (hash goes in the preset). */
+    fun brushAssetAdd(path: String): JsonObject = json { "cmd" to "brush.asset.add"; "path" to path }
+
     fun brushDuplicate(id: String, name: String? = null): JsonObject = json {
         "cmd" to "brush.duplicate"
         "id" to id
