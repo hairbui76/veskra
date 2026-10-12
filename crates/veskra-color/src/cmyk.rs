@@ -56,13 +56,15 @@ use veskra_core::limits::MAX_OUTPUT_PROFILE_BYTES;
 
 /// The bundled CMYK output profile, byte for byte (`profiles/Coated_Fogra39L_VIGC_300.icc`; may
 /// be embedded and shared, must not be altered or sold — see `profiles/README.md`).
-pub const BUNDLED_CMYK_PROFILE: &[u8] = include_bytes!("../profiles/Coated_Fogra39L_VIGC_300.icc");
+pub static BUNDLED_CMYK_PROFILE: &[u8] = include_bytes!("../profiles/Coated_Fogra39L_VIGC_300.icc");
 /// File name of the bundled profile.
 pub const BUNDLED_CMYK_PROFILE_FILE: &str = "Coated_Fogra39L_VIGC_300.icc";
 /// Round-trip color difference (CIEDE2000) above which a color counts as out of the CMYK gamut.
 pub const GAMUT_DELTA_E00: f64 = 2.0;
 /// Grid points per RGB axis of the precomputed device link.
 pub const LINK_GRID_POINTS: usize = 33;
+/// Bulk conversions of at least this many pixels run on several threads.
+pub const PARALLEL_MIN_PIXELS: usize = 1 << 15;
 
 /// LittleCMS's normalization of PCS XYZ (`u1Fixed15`): `1 + 32767/32768`.
 const MAX_ENCODEABLE_XYZ: f64 = 1.0 + 32767.0 / 32768.0;
@@ -760,8 +762,42 @@ impl CmykTransform {
     /// Convert premultiplied RGBA16 pixels (`px.len() / 4` pixels) to **straight** CMYK + alpha,
     /// 5 values per pixel in `out` (ink 0 = none, 65535 = 100 %; alpha unchanged; alpha 0 →
     /// all zero) through the device link. Extra values are left untouched.
+    ///
+    /// Buffers of at least [`PARALLEL_MIN_PIXELS`] pixels are split across up to 8 scoped threads;
+    /// every pixel is converted independently, so the output and the statistics do not depend on
+    /// scheduling.
     pub fn convert_rgba16_premul(&self, px: &[u16], out: &mut [u16]) -> CmykStats {
         let link = self.link();
+        let n = (px.len() / 4).min(out.len() / 5);
+        let threads = std::thread::available_parallelism().map_or(1, |v| v.get()).clamp(1, 8);
+        if n < PARALLEL_MIN_PIXELS || threads == 1 {
+            return Self::convert_chunk(link, &px[..n * 4], &mut out[..n * 5]);
+        }
+        let per = n.div_ceil(threads * 2);
+        let queue = std::sync::Mutex::new(
+            px[..n * 4].chunks(per * 4).zip(out[..n * 5].chunks_mut(per * 5)).collect::<Vec<_>>(),
+        );
+        let total = std::sync::Mutex::new(CmykStats::default());
+        let next = || queue.lock().ok().and_then(|mut q| q.pop());
+        let work = || {
+            let mut local = CmykStats::default();
+            while let Some((p, o)) = next() {
+                local.merge(&Self::convert_chunk(link, p, o));
+            }
+            if let Ok(mut t) = total.lock() {
+                t.merge(&local);
+            }
+        };
+        std::thread::scope(|s| {
+            for _ in 1..threads {
+                let _ = std::thread::Builder::new().spawn_scoped(s, work);
+            }
+            work();
+        });
+        total.into_inner().unwrap_or_default()
+    }
+
+    fn convert_chunk(link: &DeviceLink, px: &[u16], out: &mut [u16]) -> CmykStats {
         let mut stats = CmykStats::default();
         let mut last_key = [0u16; 4];
         let mut last = ([0u16; 4], false, 0.0f64);
@@ -840,7 +876,11 @@ pub fn inspect_for_cmyk_export(bytes: &[u8]) -> Result<(ProfileSummary, Option<S
     if let Some(reason) = cmyk_export_unsuitability(&summary) {
         return Ok((summary, Some(reason)));
     }
-    CmykProfile::parse(bytes)?;
+    if std::ptr::eq(bytes, BUNDLED_CMYK_PROFILE) {
+        CmykProfile::bundled()?; // parsed once, no copy
+    } else {
+        CmykProfile::parse(bytes)?;
+    }
     Ok((summary, None))
 }
 

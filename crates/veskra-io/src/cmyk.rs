@@ -398,21 +398,15 @@ pub struct ProfileInspection {
 /// Inspect an ICC file (`None` = the bundled CMYK profile). Unsuitable profiles are reported
 /// (`usableForCmykExport: false` + `reason`); unreadable or structurally invalid files are errors.
 pub fn inspect_profile(path: Option<&str>) -> Result<ProfileInspection, VeskraError> {
-    let (bytes, bundled) = match path {
-        None => (veskra_color::cmyk::BUNDLED_CMYK_PROFILE.to_vec(), true),
+    let owned;
+    let (bytes, bundled): (&[u8], bool) = match path {
+        None => (veskra_color::cmyk::BUNDLED_CMYK_PROFILE, true),
         Some(p) => {
-            let p = Path::new(p);
-            let meta = std::fs::metadata(p).map_err(|e| io_error(&e))?;
-            if meta.len() > MAX_OUTPUT_PROFILE_BYTES as u64 {
-                return Err(profile_error(ColorError::TooLarge {
-                    size: usize::try_from(meta.len()).unwrap_or(usize::MAX),
-                    limit: MAX_OUTPUT_PROFILE_BYTES,
-                }));
-            }
-            (read_profile_file(p)?.0, false)
+            owned = read_profile_file(Path::new(p))?.0;
+            (&owned, false)
         }
     };
-    let (s, reason) = inspect_for_cmyk_export(&bytes).map_err(|e| {
+    let (s, reason) = inspect_for_cmyk_export(bytes).map_err(|e| {
         VeskraError::new(
             e.code(),
             match e {
