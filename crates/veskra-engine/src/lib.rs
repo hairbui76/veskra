@@ -18,8 +18,8 @@ pub mod shape;
 pub mod symmetry;
 
 pub use command::{
-    AdjustKindSpec, AnchorSpec, Command, GradientKindSpec, GradientStopSpec, LayerKindSpec, PlacementSpec, SampleSpec,
-    SelectionOp, ToolKind,
+    AdjustKindSpec, AnchorSpec, ColorTargetSpec, Command, GradientKindSpec, GradientStopSpec, LayerKindSpec,
+    PlacementSpec, SampleSpec, SelectionOp, ToolKind,
 };
 pub use guide::GuideKind;
 pub use session::{

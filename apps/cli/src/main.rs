@@ -8,7 +8,8 @@
 //! veskra inspect-project <in.veskra>           manifest/entries/layers summary as JSON
 //! veskra inspect-export <file.(png|psd|svg|pdf)>  structural validation of an export
 //! veskra export <in.veskra> <out.ext> [--no-vector] [--no-raster] [--no-icc]
-//!               [--profile document|srgb|display_p3|adobe_rgb] [--depth 8|16]
+//!               [--profile document|srgb|display_p3|adobe_rgb|cmyk] [--depth 8|16]
+//!               [--cmyk-profile <file.icc>] [--intent relative|perceptual] [--no-bpc]
 //! veskra benchmark-stroke [--size N] [--samples N] [--brush ID] [--input] [--predict]
 //! veskra compare-color <a.png> <b.png>         per-channel diff + CIEDE2000 stats (sRGB, opaque)
 //! ```
@@ -19,7 +20,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 use veskra_core::ToolType;
-use veskra_core::export::{ExportFormat, ExportOptions};
+use veskra_core::export::{ExportFormat, ExportIntent, ExportOptions};
 use veskra_engine::veskra_input::{PointerAction, RawPointerEvent};
 use veskra_engine::{Command, EngineConfig, Session};
 
@@ -158,8 +159,19 @@ fn run(args: &[String]) -> R<Value> {
             };
             if let Some(p) = opt(rest, "--profile") {
                 options.profile = serde_json::from_value(json!(p))
-                    .map_err(|_| format!("unknown --profile {p} (document|srgb|display_p3|adobe_rgb)"))?;
+                    .map_err(|_| format!("unknown --profile {p} (document|srgb|display_p3|adobe_rgb|cmyk)"))?;
             }
+            if let Some(p) = opt(rest, "--cmyk-profile") {
+                options.cmyk_profile = Some(p.to_string());
+            }
+            if let Some(i) = opt(rest, "--intent") {
+                options.rendering_intent = match i {
+                    "relative" | "relative_colorimetric" => ExportIntent::RelativeColorimetric,
+                    "perceptual" => ExportIntent::Perceptual,
+                    _ => return Err(format!("unknown --intent {i} (relative|perceptual)")),
+                };
+            }
+            options.black_point_compensation = !flag(rest, "--no-bpc");
             if let Some(d) = opt(rest, "--depth") {
                 options.bit_depth = d.parse().map_err(|_| format!("bad --depth {d} (8|16)"))?;
             }
