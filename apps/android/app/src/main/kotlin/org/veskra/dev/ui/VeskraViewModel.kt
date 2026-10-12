@@ -31,7 +31,9 @@ import org.veskra.kit.Cmyk
 import org.veskra.kit.PrintColor
 import org.veskra.kit.ProfileInfo
 import org.veskra.kit.BlendMode
-import org.veskra.kit.BrushPreset
+import org.veskra.kit.BrushFiles
+import org.veskra.kit.BrushImportReport
+import org.veskra.kit.BrushInfo
 import org.veskra.kit.CanvasSpec
 import org.veskra.kit.Commands
 import org.veskra.kit.CopyFailedException
@@ -177,14 +179,18 @@ data class UiState(
     val docName: String = DEFAULT_DOC_NAME,
     val doc: DocumentInfo? = null,
     val layers: List<LayerInfo> = emptyList(),
-    val brush: BrushPreset = BrushPreset.DEFAULT,
+    val brush: BrushInfo = BrushInfo.FALLBACK,
+    /** Everything `brush.list` offers: built-in, custom and imported brushes. */
+    val brushes: List<BrushInfo> = emptyList(),
+    /** Result of the last brush import, shown until dismissed. */
+    val brushImport: BrushImportReport? = null,
     val brushSize: Float = 8f,
     val brushOpacity: Float = 1f,
     /** Stroke smoothing ("Lazy"), 0 = off. */
     val brushStabilization: Float = 0f,
     /** Where the eraser toggle returns to, and which eraser it picks. */
-    val lastPaintBrush: BrushPreset = BrushPreset.DEFAULT,
-    val lastEraser: BrushPreset = BrushPreset.ERASER_HARD,
+    val lastPaintBrush: BrushInfo = BrushInfo.FALLBACK,
+    val lastEraser: BrushInfo = BrushInfo.FALLBACK_ERASER,
     /** The pen smudges (drags existing paint) instead of painting with [brush]. */
     val smudge: Boolean = false,
     val smudgeStrength: Float = 0.75f,
@@ -273,6 +279,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         display.viewListener = { v -> _view.value = v }
         refreshGallery()
         refreshPrintProfile()
+        openBrushLibrary()
     }
 
     override fun onCleared() {
@@ -526,15 +533,15 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
      * `brush.select` resets size/opacity/smoothing to the preset's own values, so the sliders are
      * updated from the engine's answer instead of showing the previous brush's numbers.
      */
-    fun selectBrush(preset: BrushPreset) {
+    fun selectBrush(preset: BrushInfo) {
         if (_ui.value.tool != Tool.PAINT) setTool(Tool.PAINT)
         if (_ui.value.smudge) command(Commands.toolSet("brush"), redraw = false)
         _ui.update {
             it.copy(
                 brush = preset,
                 smudge = false,
-                lastPaintBrush = if (preset.isEraser) it.lastPaintBrush else preset,
-                lastEraser = if (preset.isEraser) preset else it.lastEraser,
+                lastPaintBrush = if (preset.eraser) it.lastPaintBrush else preset,
+                lastEraser = if (preset.eraser) preset else it.lastEraser,
             )
         }
         viewModelScope.launch {
@@ -553,7 +560,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     fun usePaintBrush() {
         val st = _ui.value
         when {
-            st.brush.isEraser -> selectBrush(st.lastPaintBrush)
+            st.brush.eraser -> selectBrush(st.lastPaintBrush)
             st.smudge -> {
                 _ui.update { it.copy(smudge = false) }
                 command(Commands.toolSet("brush"), redraw = false)
@@ -566,7 +573,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     /** Dock eraser button: switch to the last eraser (keeps the paint brush to return to). */
     fun useEraser() {
         val st = _ui.value
-        if (!st.brush.isEraser || st.smudge) selectBrush(st.lastEraser) else setTool(Tool.PAINT)
+        if (!st.brush.eraser || st.smudge) selectBrush(st.lastEraser) else setTool(Tool.PAINT)
     }
 
     /**
@@ -575,7 +582,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun useSmudge() {
         val st = _ui.value
-        if (st.brush.isEraser) selectBrush(st.lastPaintBrush)
+        if (st.brush.eraser) selectBrush(st.lastPaintBrush)
         _ui.update { it.copy(smudge = true) }
         command(Commands.toolSet("smudge", st.smudgeStrength), redraw = false)
         setTool(Tool.PAINT)
@@ -1080,7 +1087,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------------------------------------------------------- history / autosave
 
     private fun onHistoryChanged(strokeCommitted: Boolean) {
-        if (strokeCommitted && !_ui.value.brush.isEraser && !_ui.value.smudge) noteColorUsed()
+        if (strokeCommitted && !_ui.value.brush.eraser && !_ui.value.smudge) noteColorUsed()
         viewModelScope.launch { refreshDocument() }
         if (strokeCommitted) scheduleAutosave()
     }
@@ -1220,6 +1227,123 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         maybePreflight()
     }
 
+    // ---------------------------------------------------------------- brush library
+
+    private fun openBrushLibrary() {
+        viewModelScope.launch {
+            // Older engines do not know the library command; the built-in list still loads.
+            query(Commands.brushLibraryOpen(store.brushesDir.absolutePath))
+            refreshBrushes()
+        }
+    }
+
+    private suspend fun refreshBrushes() {
+        val list = query(Commands.brushList())?.let(BrushInfo::listFromJson) ?: return
+        _ui.update { st ->
+            fun fresh(b: BrushInfo, fallback: BrushInfo) = list.firstOrNull { it.id == b.id } ?: list.firstOrNull { it.id == fallback.id } ?: fallback
+            st.copy(
+                brushes = list,
+                brush = fresh(st.brush, BrushInfo.FALLBACK),
+                lastPaintBrush = fresh(st.lastPaintBrush, BrushInfo.FALLBACK),
+                lastEraser = fresh(st.lastEraser, BrushInfo.FALLBACK_ERASER),
+            )
+        }
+        previewCache.clear()
+    }
+
+    /** id@version → thumbnail; cleared whenever the list or the color changes. */
+    private val previewCache = HashMap<String, android.graphics.Bitmap>()
+    private var previewColor: HexColor? = null
+
+    /** Stroke thumbnail drawn by the engine with the current color; null if it cannot be rendered. */
+    suspend fun brushPreview(b: BrushInfo, width: Int, height: Int): android.graphics.Bitmap? {
+        val color = _ui.value.color
+        if (color != previewColor) {
+            previewCache.clear()
+            previewColor = color
+        }
+        val key = "${b.id}@${b.version}"
+        previewCache[key]?.let { return it }
+        val png = query(Commands.brushPreview(b.id, width, height))?.string("png") ?: return null
+        val bmp = withContext(Dispatchers.Default) {
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(png)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        } ?: return null
+        previewCache[key] = bmp
+        return bmp
+    }
+
+    /** SAF: a `.przp` / `.prbr` (Infinite Painter) or `.vbrush` file. */
+    fun importBrushes(uri: Uri) {
+        viewModelScope.launch {
+            _ui.update { it.copy(busy = true) }
+            val staged = withContext(Dispatchers.IO) {
+                try {
+                    store.stageForImport(uri, MAX_BRUSH_IMPORT_BYTES)
+                } catch (e: IOException) {
+                    null
+                }
+            }
+            if (staged == null) {
+                _ui.update { it.copy(busy = false) }
+                show(R.string.brush_import_failed, "")
+                return@launch
+            }
+            val result = onEngine { s -> s.execute(Commands.brushImport(staged.absolutePath)) }
+            withContext(Dispatchers.IO) { staged.delete() }
+            _ui.update { it.copy(busy = false) }
+            when (result) {
+                is EngineResult.Ok -> {
+                    val report = (result.value as? JsonObject)?.let(BrushImportReport::fromJson)
+                    refreshBrushes()
+                    _ui.update { it.copy(brushImport = report) }
+                }
+                is EngineResult.Err -> show(R.string.brush_import_failed, result.error.message.ifBlank { result.error.code })
+                null -> Unit
+            }
+        }
+    }
+
+    fun dismissBrushImport() = _ui.update { it.copy(brushImport = null) }
+
+    fun duplicateBrush(b: BrushInfo) {
+        viewModelScope.launch {
+            exec(Commands.brushDuplicate(b.id, str(R.string.brush_copy_name, b.name)), redraw = false)
+            refreshBrushes()
+        }
+    }
+
+    fun deleteBrush(b: BrushInfo) {
+        if (!b.editable) return
+        viewModelScope.launch {
+            if (_ui.value.brush.id == b.id) selectBrush(if (b.eraser) BrushInfo.FALLBACK_ERASER else BrushInfo.FALLBACK)
+            exec(Commands.brushDelete(b.id), redraw = false)
+            refreshBrushes()
+        }
+    }
+
+    /** SAF CreateDocument result: write the brush as `.vbrush`, then copy it out. */
+    fun exportBrush(b: BrushInfo, uri: Uri) {
+        viewModelScope.launch {
+            val tmp = File(store.exportStagingDir, "brush-${System.nanoTime()}.${BrushFiles.EXPORT_EXTENSION}")
+            try {
+                val r = onEngine { s -> s.execute(Commands.brushExport(b.id, tmp.absolutePath)) }
+                if (r !is EngineResult.Ok) {
+                    (r as? EngineResult.Err)?.let { showEngineError(it.error) }
+                    return@launch
+                }
+                val failure = ioStep { store.copyToSaf(tmp, uri) }
+                if (failure != null) show(saveFailureText(failure.first)) else show(R.string.brush_exported, b.name)
+            } finally {
+                withContext(Dispatchers.IO) { tmp.delete() }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- print color (CMYK)
 
     private fun refreshPrintProfile() {
@@ -1352,6 +1476,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         private const val MAX_LAYER_NAME_CHARS = 60
         private const val MIN_ZOOM = 0.02f
         private const val MAX_PATH_POINTS = 2000
+        private const val MAX_BRUSH_IMPORT_BYTES = 256L * 1024 * 1024
         private const val CROP_ZOOM_OUT = 0.8f
         private const val MAX_ZOOM = 64f
 

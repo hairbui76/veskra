@@ -1,71 +1,120 @@
 package org.veskra.dev.ui.editor
 
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.veskra.dev.R
 import org.veskra.dev.ui.UiState
 import org.veskra.dev.ui.VeskraViewModel
 import org.veskra.dev.ui.icons.VeskraIcons
-import org.veskra.kit.BrushPreset
+import org.veskra.kit.BrushFiles
+import org.veskra.kit.BrushImportReport
+import org.veskra.kit.BrushInfo
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 @StringRes
-fun brushName(p: BrushPreset): Int = when (p) {
-    BrushPreset.PENCIL_ROUGH -> R.string.brush_pencil_rough
-    BrushPreset.PENCIL_SMOOTH -> R.string.brush_pencil_smooth
-    BrushPreset.PEN_TECHNICAL -> R.string.brush_pen_technical
-    BrushPreset.PEN_BRUSH -> R.string.brush_pen_brush
-    BrushPreset.MARKER -> R.string.brush_marker
-    BrushPreset.ROUND_HARD -> R.string.brush_round_hard
-    BrushPreset.ROUND_SOFT -> R.string.brush_round_soft
-    BrushPreset.CHARCOAL -> R.string.brush_charcoal
-    BrushPreset.ERASER_HARD -> R.string.brush_eraser_hard
-    BrushPreset.ERASER_SOFT -> R.string.brush_eraser_soft
+private fun categoryName(category: String): Int? = when (category) {
+    "pencil" -> R.string.brush_category_pencil
+    "ink" -> R.string.brush_category_ink
+    "marker" -> R.string.brush_category_marker
+    "paint" -> R.string.brush_category_paint
+    "airbrush" -> R.string.brush_category_airbrush
+    "texture" -> R.string.brush_category_texture
+    "effect" -> R.string.brush_category_effect
+    "smudge" -> R.string.brush_category_smudge
+    "eraser" -> R.string.brush_category_eraser
+    "custom" -> R.string.brush_category_custom
+    "imported" -> R.string.brush_category_imported
+    else -> null
+}
+
+/** Groups for the tab row: built-in categories, then "My brushes", then one group per imported pack. */
+private fun groupOf(b: BrushInfo): String = when {
+    b.isImported -> "imported:" + (b.folder ?: "")
+    b.source == "custom" -> "custom"
+    else -> b.category
+}
+
+private fun groupOrder(group: String): Int {
+    val base = group.substringBefore(':')
+    val i = BrushInfo.CATEGORY_ORDER.indexOf(base)
+    return if (i >= 0) i else BrushInfo.CATEGORY_ORDER.size
 }
 
 /**
- * Brush panel (DSN-01): the presets of the active kind (paint brushes or erasers) and the size,
- * opacity and smoothing of the current brush, or the smudge settings while smudging. Brush behavior itself is owned by the engine (BRH).
+ * Brush panel (DSN-01): the brush library grouped by category (built-in, the user's own and
+ * imported packs) with stroke thumbnails rendered by the engine, plus size, opacity and smoothing of
+ * the current brush. While erasing only erasers are listed; while smudging, the smudge settings.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifier) {
-    val erasers = state.brush.isEraser
-    FloatingPanel(modifier.widthIn(max = 360.dp)) {
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBrushes(uri) }
+    var exporting by remember { mutableStateOf<BrushInfo?>(null) }
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val b = exporting
+        if (uri != null && b != null) vm.exportBrush(b, uri)
+        exporting = null
+    }
+
+    FloatingPanel(modifier.widthIn(max = 520.dp)) {
         Column(
-            Modifier.padding(16.dp).heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.padding(16.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.smudge) {
                 // Smudge moves the paint that is already there: it has a size and a strength, no preset.
@@ -75,35 +124,139 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
                 Text(stringResource(R.string.smudge_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 return@Column
             }
-            PanelLabel(stringResource(if (erasers) R.string.brush_group_erasers else R.string.brush_sheet_title))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), maxItemsInEachRow = 2) {
-                BrushPreset.entries.filter { it.isEraser == erasers }.forEach { preset ->
-                    PresetChip(preset, selected = preset == state.brush, modifier = Modifier.weight(1f)) { vm.selectBrush(preset) }
+
+            val erasers = state.brush.eraser
+            val list = state.brushes.ifEmpty { listOf(state.brush) }.filter { it.eraser == erasers }
+            val groups = list.groupBy(::groupOf).toSortedMap(compareBy<String>({ groupOrder(it) }, { it }))
+            var group by rememberSaveable(erasers) { mutableStateOf(groupOf(state.brush)) }
+            if (group !in groups) group = groups.keys.firstOrNull() ?: ""
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PanelLabel(stringResource(if (erasers) R.string.brush_group_erasers else R.string.brush_sheet_title), Modifier.weight(1f))
+                OutlinedButton(onClick = { import.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Icon(VeskraIcons.Add, contentDescription = null)
+                    Text(stringResource(R.string.brush_import), modifier = Modifier.padding(start = 6.dp))
                 }
             }
+            if (groups.size > 1) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    groups.keys.forEach { g ->
+                        val label = if (g.startsWith("imported:")) {
+                            g.removePrefix("imported:").ifBlank { stringResource(R.string.brush_category_imported) }
+                        } else {
+                            categoryName(g)?.let { stringResource(it) } ?: g
+                        }
+                        FilterChip(selected = g == group, onClick = { group = g }, label = { Text(label, maxLines = 1) })
+                    }
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), maxItemsInEachRow = 2) {
+                groups[group].orEmpty().forEach { b ->
+                    BrushCard(
+                        brush = b,
+                        selected = b.id == state.brush.id,
+                        vm = vm,
+                        onSelect = { vm.selectBrush(b) },
+                        onExport = {
+                            exporting = b
+                            export.launch(b.name.filter { it.isLetterOrDigit() || it == ' ' || it == '-' }.trim().ifBlank { "brush" } + "." + BrushFiles.EXPORT_EXTENSION)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(stringResource(R.string.brush_import_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SizeSlider(state.brushSize, vm::setBrushSize)
             FractionSlider(stringResource(R.string.tool_brush_opacity), state.brushOpacity, vm::setBrushOpacity)
             FractionSlider(stringResource(R.string.tool_brush_smoothing), state.brushStabilization, vm::setBrushStabilization)
         }
     }
+    state.brushImport?.let { ImportReportDialog(it, onDismiss = vm::dismissBrushImport) }
 }
 
+/** One library entry: stroke thumbnail, name, and a menu (duplicate, export, delete). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PresetChip(preset: BrushPreset, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun BrushCard(
+    brush: BrushInfo,
+    selected: Boolean,
+    vm: VeskraViewModel,
+    onSelect: () -> Unit,
+    onExport: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) colors.primary else colors.surfaceVariant)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 12.dp),
+    var preview by remember(brush.id, brush.version) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(brush.id, brush.version) { preview = vm.brushPreview(brush, PREVIEW_W, PREVIEW_H) }
+    var menu by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier
+            .clip(shape)
+            .background(if (selected) colors.primary.copy(alpha = 0.18f) else colors.surfaceVariant)
+            .border(if (selected) 2.dp else 0.dp, if (selected) colors.primary else Color.Transparent, shape)
+            .combinedClickable(role = Role.RadioButton, onClick = onSelect, onLongClick = { menu = true })
+            .semantics { this.selected = selected }
+            .padding(start = 10.dp, top = 8.dp, bottom = 6.dp),
     ) {
-        val tint = if (selected) colors.onPrimary else colors.onSurfaceVariant
-        Icon(if (preset.isEraser) VeskraIcons.Eraser else VeskraIcons.Brush, contentDescription = null, tint = tint)
-        Text(stringResource(brushName(preset)), color = tint, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
+        Box(Modifier.fillMaxWidth().padding(end = 10.dp).height(44.dp).clip(RoundedCornerShape(8.dp)).background(Color.White)) {
+            preview?.let { Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().height(44.dp)) }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(top = 4.dp)) {
+                Text(brush.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (brush.vectorEligible) {
+                    Text(stringResource(R.string.brush_vector_badge), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
+            }
+            Box {
+                val more = stringResource(R.string.brush_more_cd, brush.name)
+                IconButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = more }) {
+                    Icon(VeskraIcons.More, contentDescription = null)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.brush_duplicate)) }, onClick = { menu = false; vm.duplicateBrush(brush) })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.brush_export)) }, onClick = { menu = false; onExport() })
+                    if (brush.editable) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.brush_delete)) }, onClick = { menu = false; vm.deleteBrush(brush) })
+                    }
+                }
+            }
+        }
     }
+}
+
+private const val PREVIEW_W = 360
+private const val PREVIEW_H = 72
+
+@Composable
+private fun ImportReportDialog(report: BrushImportReport, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.brush_import_title)) },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.brush_import_summary, report.imported.size, report.failed.size))
+                Text(stringResource(R.string.brush_import_note), style = MaterialTheme.typography.bodySmall)
+                report.imported.forEach { b ->
+                    Column {
+                        Text(b.name, style = MaterialTheme.typography.labelLarge)
+                        if (b.approximated.isNotEmpty()) {
+                            Text(stringResource(R.string.brush_import_approx, b.approximated.joinToString()), style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (b.unsupported.isNotEmpty()) {
+                            Text(stringResource(R.string.brush_import_unsupported, b.unsupported.joinToString()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+                report.failed.forEach { f ->
+                    Text(stringResource(R.string.brush_import_failed_item, f.name, f.reason), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                report.warnings.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.action_ok)) } },
+    )
 }
 
 /**

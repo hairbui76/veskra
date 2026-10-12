@@ -161,6 +161,30 @@ class ProjectStore(context: Context) {
         }
     }
 
+    /** The user's brush library (`*.vbrush`), opened by the engine with `brush.library.open`. */
+    val brushesDir: File = File(context.filesDir, "brushes").apply { mkdirs() }
+
+    /**
+     * Copies a picked file into the cache keeping its extension (the engine also sniffs content),
+     * for one-shot imports such as brush packs. Caller deletes the copy.
+     */
+    fun stageForImport(uri: Uri, maxBytes: Long): File {
+        val size = querySize(uri)
+        if (size != null && size > maxBytes) throw IOException("file too large")
+        val ext = displayName(uri)?.substringAfterLast('.', "")?.lowercase()?.filter { it.isLetterOrDigit() }?.take(8).orEmpty()
+        val dst = File(openStagingDir, "import-${System.nanoTime()}" + if (ext.isEmpty()) "" else ".$ext")
+        StreamCopier.copyAndClose(
+            openInput = { resolver.openInputStream(uri) ?: throw IOException("provider returned no stream") },
+            openOutput = { dst.outputStream() },
+            expectedBytes = null,
+        )
+        if (dst.length() > maxBytes) {
+            dst.delete()
+            throw IOException("file too large")
+        }
+        return dst
+    }
+
     /** Imported printer (CMYK) profiles, kept app-private so exports can reference them by path. */
     val profilesDir: File = File(context.filesDir, "profiles").apply { mkdirs() }
 

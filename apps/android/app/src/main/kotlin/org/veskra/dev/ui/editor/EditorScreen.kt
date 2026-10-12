@@ -245,9 +245,9 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
 @Composable
 private fun Dock(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifier) {
     val painting = state.tool == Tool.PAINT
-    val brushActive = painting && !state.brush.isEraser && !state.smudge
+    val brushActive = painting && !state.brush.eraser && !state.smudge
     val smudgeActive = painting && state.smudge
-    val eraserActive = painting && state.brush.isEraser && !state.smudge
+    val eraserActive = painting && state.brush.eraser && !state.smudge
     Surface(modifier = modifier, shape = RoundedCornerShape(32.dp), tonalElevation = 3.dp, shadowElevation = 6.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(6.dp)) {
             DockButton(VeskraIcons.Brush, stringResource(R.string.tool_brush), brushActive) {

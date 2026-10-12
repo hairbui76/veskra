@@ -169,16 +169,34 @@
     <!-- Brush picker -->
     <string name="brush_sheet_title">Brushes</string>
     <string name="brush_group_erasers">Erasers</string>
-    <string name="brush_pencil_rough">Rough pencil</string>
-    <string name="brush_pencil_smooth">Smooth pencil</string>
-    <string name="brush_pen_technical">Technical pen</string>
-    <string name="brush_pen_brush">Brush pen</string>
-    <string name="brush_marker">Marker</string>
-    <string name="brush_round_hard">Hard round</string>
-    <string name="brush_round_soft">Soft round / airbrush</string>
-    <string name="brush_charcoal">Charcoal</string>
-    <string name="brush_eraser_hard">Hard eraser</string>
-    <string name="brush_eraser_soft">Soft eraser</string>
+    <string name="brush_import">Import brushes</string>
+    <string name="brush_import_hint">Infinite Painter brushes (.przp, .prbr) or Veskra brushes (.vbrush)</string>
+    <string name="brush_import_failed">These brushes could not be imported. %1$s</string>
+    <string name="brush_import_title">Brushes imported</string>
+    <string name="brush_import_summary">%1$d imported, %2$d could not be read.</string>
+    <string name="brush_import_note">Brushes from other apps are converted to Veskra\'s brush engine, so they look similar but not identical. Changed or missing features are listed below.</string>
+    <string name="brush_import_approx">Approximated: %1$s</string>
+    <string name="brush_import_unsupported">Not available: %1$s</string>
+    <string name="brush_import_failed_item">%1$s: %2$s</string>
+    <string name="brush_copy_name">%1$s copy</string>
+    <string name="brush_duplicate">Duplicate</string>
+    <string name="brush_export">Export (.vbrush)</string>
+    <string name="brush_delete">Delete</string>
+    <string name="brush_exported">Exported “%1$s”.</string>
+    <string name="brush_more_cd">More actions for %1$s</string>
+    <string name="brush_vector_badge">Vector</string>
+    <string name="brush_category_all">All</string>
+    <string name="brush_category_pencil">Pencils</string>
+    <string name="brush_category_ink">Inks</string>
+    <string name="brush_category_marker">Markers</string>
+    <string name="brush_category_paint">Paint</string>
+    <string name="brush_category_airbrush">Airbrush</string>
+    <string name="brush_category_texture">Textures</string>
+    <string name="brush_category_effect">Effects</string>
+    <string name="brush_category_smudge">Smudge</string>
+    <string name="brush_category_eraser">Erasers</string>
+    <string name="brush_category_custom">My brushes</string>
+    <string name="brush_category_imported">Imported</string>
 
     <!-- Color sheet -->
     <string name="color_hex_label">Hex (#RRGGBB)</string>

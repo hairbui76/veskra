@@ -87,6 +87,48 @@ object Commands {
 
     fun brushSelect(preset: String): JsonObject = json { "cmd" to "brush.select"; "preset" to preset }
 
+    // ----- brush library (custom and imported brushes; not document edits, no undo) -----
+
+    /** Loads the user's brushes (`*.vbrush`) from [dir] and keeps saving new ones there. */
+    fun brushLibraryOpen(dir: String): JsonObject = json { "cmd" to "brush.library.open"; "dir" to dir }
+
+    fun brushList(): JsonObject = json { "cmd" to "brush.list" }
+
+    /** Full schema-3 preset JSON, for the brush editor. */
+    fun brushGet(id: String): JsonObject = json { "cmd" to "brush.get"; "id" to id }
+
+    /** Creates or updates a custom brush; [assets] maps content hash → absolute PNG path. */
+    fun brushSave(preset: JsonObject, assets: Map<String, String> = emptyMap()): JsonObject = json {
+        "cmd" to "brush.save"
+        "preset" to preset
+        if (assets.isNotEmpty()) "assets" to JsonObject(LinkedHashMap<String, JsonValue>().apply { assets.forEach { (k, v) -> put(k, JsonString(v)) } })
+    }
+
+    fun brushDelete(id: String): JsonObject = json { "cmd" to "brush.delete"; "id" to id }
+
+    fun brushDuplicate(id: String, name: String? = null): JsonObject = json {
+        "cmd" to "brush.duplicate"
+        "id" to id
+        if (name != null) "name" to name
+    }
+
+    /** `.vbrush`, Infinite Painter `.prbr` or `.przp` (detected by content). */
+    fun brushImport(path: String): JsonObject = json { "cmd" to "brush.import"; "path" to path }
+
+    /** Writes a `.vbrush` (Veskra's own brush file). */
+    fun brushExport(id: String, path: String): JsonObject = json { "cmd" to "brush.export"; "id" to id; "path" to path }
+
+    /** Stroke thumbnail as base64 PNG, at most 1024×256. */
+    fun brushPreview(id: String, width: Int, height: Int): JsonObject {
+        require(width in 1..1024 && height in 1..256) { "preview size out of range" }
+        return json {
+            "cmd" to "brush.preview"
+            "id" to id
+            "width" to width
+            "height" to height
+        }
+    }
+
     /** Size in document px; opacity/flow in [0,1]. Null = unchanged. */
     fun brushSet(size: Float? = null, opacity: Float? = null, flow: Float? = null, stabilization: Float? = null): JsonObject {
         if (size != null) require(size.isFinite() && size > 0f) { "size must be > 0" }
