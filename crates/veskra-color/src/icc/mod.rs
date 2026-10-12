@@ -17,6 +17,7 @@
 //! `tests/icc_robustness.rs`). Informational text tags that are malformed are ignored rather
 //! than rejected; structural problems and malformed colorimetric tags are typed errors.
 
+pub mod lut;
 mod md5;
 mod writer;
 
@@ -116,26 +117,26 @@ impl fmt::Debug for IccProfile {
 // ---------------------------------------------------------------------------------------------
 // Bounded readers. All return typed errors instead of panicking.
 
-fn slice(data: &[u8], off: usize, len: usize) -> Option<&[u8]> {
+pub(crate) fn slice(data: &[u8], off: usize, len: usize) -> Option<&[u8]> {
     data.get(off..off.checked_add(len)?)
 }
 
-fn be_u16(data: &[u8], off: usize) -> Option<u16> {
+pub(crate) fn be_u16(data: &[u8], off: usize) -> Option<u16> {
     let s = slice(data, off, 2)?;
     Some(u16::from_be_bytes([s[0], s[1]]))
 }
 
-fn be_u32(data: &[u8], off: usize) -> Option<u32> {
+pub(crate) fn be_u32(data: &[u8], off: usize) -> Option<u32> {
     let s = slice(data, off, 4)?;
     Some(u32::from_be_bytes([s[0], s[1], s[2], s[3]]))
 }
 
-fn sig(data: &[u8], off: usize) -> Option<[u8; 4]> {
+pub(crate) fn sig(data: &[u8], off: usize) -> Option<[u8; 4]> {
     let s = slice(data, off, 4)?;
     Some([s[0], s[1], s[2], s[3]])
 }
 
-fn s15f16(data: &[u8], off: usize) -> Option<f64> {
+pub(crate) fn s15f16(data: &[u8], off: usize) -> Option<f64> {
     Some(be_u32(data, off)? as i32 as f64 / 65536.0)
 }
 
@@ -143,34 +144,38 @@ fn xyz_at(data: &[u8], off: usize) -> Option<Vec3> {
     Some([s15f16(data, off)?, s15f16(data, off + 4)?, s15f16(data, off + 8)?])
 }
 
-fn tag_err(tag: [u8; 4], reason: &'static str) -> ColorError {
+pub(crate) fn tag_err(tag: [u8; 4], reason: &'static str) -> ColorError {
     ColorError::InvalidTag { tag: sig_str(tag), reason }
 }
 
 const LUT_TAGS: [&[u8; 4]; 9] = [b"A2B0", b"A2B1", b"A2B2", b"B2A0", b"B2A1", b"B2A2", b"D2B0", b"D2B1", b"D2B2"];
 
-struct TagTable<'a> {
+pub(crate) struct TagTable<'a> {
     data: &'a [u8],
     tags: Vec<([u8; 4], usize, usize)>,
 }
 
 impl<'a> TagTable<'a> {
-    fn get(&self, s: &[u8; 4]) -> Option<&'a [u8]> {
+    pub(crate) fn get(&self, s: &[u8; 4]) -> Option<&'a [u8]> {
         self.tags.iter().find(|(t, _, _)| t == s).and_then(|&(_, off, len)| slice(self.data, off, len))
     }
-    fn has(&self, s: &[u8; 4]) -> bool {
+    pub(crate) fn has(&self, s: &[u8; 4]) -> bool {
         self.tags.iter().any(|(t, _, _)| t == s)
+    }
+    /// `(offset, size)` of a tag inside the profile bytes (validated by [`parse_tag_table`]).
+    pub(crate) fn range(&self, s: &[u8; 4]) -> Option<(usize, usize)> {
+        self.tags.iter().find(|(t, _, _)| t == s).map(|&(_, off, len)| (off, len))
     }
 }
 
-fn parse_xyz_tag(tag: [u8; 4], d: &[u8]) -> Result<Vec3, ColorError> {
+pub(crate) fn parse_xyz_tag(tag: [u8; 4], d: &[u8]) -> Result<Vec3, ColorError> {
     if sig(d, 0) != Some(*b"XYZ ") {
         return Err(tag_err(tag, "expected XYZType"));
     }
     xyz_at(d, 8).ok_or_else(|| tag_err(tag, "XYZType too short"))
 }
 
-fn parse_curve_tag(tag: [u8; 4], d: &[u8]) -> Result<ToneCurve, ColorError> {
+pub(crate) fn parse_curve_tag(tag: [u8; 4], d: &[u8]) -> Result<ToneCurve, ColorError> {
     match sig(d, 0) {
         Some(t) if &t == b"curv" => {
             let count = be_u32(d, 8).ok_or_else(|| tag_err(tag, "curv too short"))? as usize;
@@ -257,7 +262,7 @@ fn parse_mluc(d: &[u8]) -> Option<String> {
     Some(sanitize_text(&s))
 }
 
-fn parse_text_tag(d: &[u8]) -> Option<String> {
+pub(crate) fn parse_text_tag(d: &[u8]) -> Option<String> {
     match &sig(d, 0)? {
         b"mluc" => parse_mluc(d),
         b"desc" => {
@@ -270,90 +275,163 @@ fn parse_text_tag(d: &[u8]) -> Option<String> {
     }
 }
 
+/// Header fields shared by every profile kind (see [`parse_header`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Header {
+    pub version: IccVersion,
+    pub class: [u8; 4],
+    pub color_space: [u8; 4],
+    pub pcs: [u8; 4],
+    pub rendering_intent: u32,
+}
+
+/// Bounded header checks shared by every parser: size ≤ `limit`, ≥ 132 bytes, declared size equal
+/// to the data length, `acsp` magic and ICC major version 2 or 4.
+pub(crate) fn parse_header(bytes: &[u8], limit: usize) -> Result<Header, ColorError> {
+    let len = bytes.len();
+    if len > limit {
+        return Err(ColorError::TooLarge { size: len, limit });
+    }
+    if len < 132 {
+        return Err(ColorError::Truncated { what: "header and tag count", needed: 132, available: len as u64 });
+    }
+    let declared = be_u32(bytes, 0).unwrap_or(0) as u64;
+    if declared > len as u64 {
+        return Err(ColorError::Truncated { what: "declared profile size", needed: declared, available: len as u64 });
+    }
+    if declared < len as u64 {
+        return Err(ColorError::SizeMismatch { declared, actual: len as u64 });
+    }
+    if sig(bytes, 36) != Some(*b"acsp") {
+        return Err(ColorError::InvalidProfile("missing 'acsp' file signature"));
+    }
+    let version = IccVersion { major: bytes[8], minor: bytes[9] >> 4, bugfix: bytes[9] & 0x0f };
+    if version.major != 2 && version.major != 4 {
+        return Err(ColorError::UnsupportedVersion { major: version.major, minor: version.minor });
+    }
+    Ok(Header {
+        version,
+        class: sig(bytes, 12).unwrap_or([0; 4]),
+        color_space: sig(bytes, 16).unwrap_or([0; 4]),
+        pcs: sig(bytes, 20).unwrap_or([0; 4]),
+        rendering_intent: be_u32(bytes, 64).unwrap_or(0) & 0xffff,
+    })
+}
+
+/// Bounded tag-table parse: count ≤ [`MAX_TAGS`], every entry inside the data and after the table,
+/// ≥ 8 bytes, unique signatures, no partial overlaps (identical ranges may be shared).
+pub(crate) fn parse_tag_table(bytes: &[u8]) -> Result<TagTable<'_>, ColorError> {
+    let len = bytes.len();
+    let count = be_u32(bytes, 128).unwrap_or(0) as usize;
+    if count > MAX_TAGS {
+        return Err(ColorError::InvalidProfile("absurd tag count"));
+    }
+    let table_end = 132 + 12 * count;
+    if table_end > len {
+        return Err(ColorError::Truncated { what: "tag table", needed: table_end as u64, available: len as u64 });
+    }
+    let mut tags = Vec::with_capacity(count);
+    for i in 0..count {
+        let base = 132 + 12 * i;
+        let s = sig(bytes, base).unwrap_or([0; 4]);
+        let off = be_u32(bytes, base + 4).unwrap_or(0) as usize;
+        let size = be_u32(bytes, base + 8).unwrap_or(0) as usize;
+        if off < table_end {
+            return Err(tag_err(s, "tag data overlaps header or tag table"));
+        }
+        match off.checked_add(size) {
+            Some(end) if end <= len => {}
+            _ => return Err(tag_err(s, "tag data out of bounds")),
+        }
+        if size < 8 {
+            return Err(tag_err(s, "tag smaller than its type header"));
+        }
+        if tags.iter().any(|(t, _, _)| *t == s) {
+            return Err(tag_err(s, "duplicate tag signature"));
+        }
+        tags.push((s, off, size));
+    }
+    // Identical (offset, size) pairs may be shared (e.g. rTRC = gTRC = bTRC); partial overlaps
+    // are rejected.
+    let mut ranges: Vec<(usize, usize)> = tags.iter().map(|&(_, o, s)| (o, o + s)).collect();
+    ranges.sort_unstable();
+    ranges.dedup();
+    if ranges.windows(2).any(|w| w[1].0 < w[0].1) {
+        return Err(ColorError::InvalidProfile("overlapping tag data"));
+    }
+    Ok(TagTable { data: bytes, tags })
+}
+
+/// Header-level facts about any ICC profile (also unsupported kinds), for `profile.inspect`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileSummary {
+    pub version: IccVersion,
+    /// Device class signature, e.g. `"prtr"`, `"mntr"` (non-printable bytes → `?`).
+    pub class: String,
+    /// Data color space signature without padding, e.g. `"CMYK"`, `"RGB"`.
+    pub color_space: String,
+    /// PCS signature without padding, `"Lab"` or `"XYZ"`.
+    pub pcs: String,
+    pub description: String,
+    pub copyright: Option<String>,
+    /// Tag signatures in table order.
+    pub tags: Vec<String>,
+    pub bytes: usize,
+}
+
+impl ProfileSummary {
+    /// Whether the tag table lists `sig`.
+    pub fn has_tag(&self, sig: &str) -> bool {
+        self.tags.iter().any(|t| t == sig)
+    }
+
+    /// `"2.1"`, `"4.3"`, … (major.minor).
+    pub fn version_string(&self) -> String {
+        format!("{}.{}", self.version.major, self.version.minor)
+    }
+}
+
+/// Structural summary of any ICC profile up to `limit` bytes (header + tag table + text tags).
+/// Fails only for data that is not a structurally valid ICC v2/v4 profile; unsupported classes or
+/// color spaces are reported, not rejected.
+pub fn summarize(bytes: &[u8], limit: usize) -> Result<ProfileSummary, ColorError> {
+    let h = parse_header(bytes, limit)?;
+    let table = parse_tag_table(bytes)?;
+    let trim = |s: [u8; 4]| sig_str(s).trim_end().to_string();
+    Ok(ProfileSummary {
+        version: h.version,
+        class: sig_str(h.class),
+        color_space: trim(h.color_space),
+        pcs: trim(h.pcs),
+        description: table.get(b"desc").and_then(parse_text_tag).unwrap_or_default(),
+        copyright: table.get(b"cprt").and_then(parse_text_tag),
+        tags: table.tags.iter().map(|(t, _, _)| sig_str(*t)).collect(),
+        bytes: bytes.len(),
+    })
+}
+
 impl IccProfile {
     /// Parse and validate an ICC profile (see module docs for the supported subset).
     pub fn parse(bytes: &[u8]) -> Result<IccProfile, ColorError> {
-        let len = bytes.len();
-        if len > MAX_ICC_BYTES {
-            return Err(ColorError::TooLarge { size: len, limit: MAX_ICC_BYTES });
-        }
-        if len < 132 {
-            return Err(ColorError::Truncated { what: "header and tag count", needed: 132, available: len as u64 });
-        }
-        let declared = be_u32(bytes, 0).unwrap_or(0) as u64;
-        if declared > len as u64 {
-            return Err(ColorError::Truncated {
-                what: "declared profile size",
-                needed: declared,
-                available: len as u64,
-            });
-        }
-        if declared < len as u64 {
-            return Err(ColorError::SizeMismatch { declared, actual: len as u64 });
-        }
-        if sig(bytes, 36) != Some(*b"acsp") {
-            return Err(ColorError::InvalidProfile("missing 'acsp' file signature"));
-        }
-        let version = IccVersion { major: bytes[8], minor: bytes[9] >> 4, bugfix: bytes[9] & 0x0f };
-        if version.major != 2 && version.major != 4 {
-            return Err(ColorError::UnsupportedVersion { major: version.major, minor: version.minor });
-        }
-        let class_sig = sig(bytes, 12).unwrap_or([0; 4]);
-        let class = match &class_sig {
+        let h = parse_header(bytes, MAX_ICC_BYTES)?;
+        let version = h.version;
+        let class = match &h.class {
             b"scnr" => ProfileClass::Input,
             b"mntr" => ProfileClass::Display,
             b"prtr" => ProfileClass::Output,
             b"spac" => ProfileClass::ColorSpace,
-            _ => return Err(ColorError::UnsupportedProfileClass(sig_str(class_sig))),
+            _ => return Err(ColorError::UnsupportedProfileClass(sig_str(h.class))),
         };
-        let cs_sig = sig(bytes, 16).unwrap_or([0; 4]);
-        let color_space = match &cs_sig {
+        let color_space = match &h.color_space {
             b"RGB " => ProfileColorSpace::Rgb,
             b"GRAY" => ProfileColorSpace::Gray,
-            _ => return Err(ColorError::UnsupportedColorSpace(sig_str(cs_sig))),
+            _ => return Err(ColorError::UnsupportedColorSpace(sig_str(h.color_space))),
         };
-        let pcs_sig = sig(bytes, 20).unwrap_or([0; 4]);
-        let rendering_intent = be_u32(bytes, 64).unwrap_or(0) & 0xffff;
+        let pcs_sig = h.pcs;
+        let rendering_intent = h.rendering_intent;
 
         // ---- tag table
-        let count = be_u32(bytes, 128).unwrap_or(0) as usize;
-        if count > MAX_TAGS {
-            return Err(ColorError::InvalidProfile("absurd tag count"));
-        }
-        let table_end = 132 + 12 * count;
-        if table_end > len {
-            return Err(ColorError::Truncated { what: "tag table", needed: table_end as u64, available: len as u64 });
-        }
-        let mut tags = Vec::with_capacity(count);
-        for i in 0..count {
-            let base = 132 + 12 * i;
-            let s = sig(bytes, base).unwrap_or([0; 4]);
-            let off = be_u32(bytes, base + 4).unwrap_or(0) as usize;
-            let size = be_u32(bytes, base + 8).unwrap_or(0) as usize;
-            if off < table_end {
-                return Err(tag_err(s, "tag data overlaps header or tag table"));
-            }
-            match off.checked_add(size) {
-                Some(end) if end <= len => {}
-                _ => return Err(tag_err(s, "tag data out of bounds")),
-            }
-            if size < 8 {
-                return Err(tag_err(s, "tag smaller than its type header"));
-            }
-            if tags.iter().any(|(t, _, _)| *t == s) {
-                return Err(tag_err(s, "duplicate tag signature"));
-            }
-            tags.push((s, off, size));
-        }
-        // Identical (offset, size) pairs may be shared (e.g. rTRC = gTRC = bTRC); partial overlaps
-        // are rejected.
-        let mut ranges: Vec<(usize, usize)> = tags.iter().map(|&(_, o, s)| (o, o + s)).collect();
-        ranges.sort_unstable();
-        ranges.dedup();
-        if ranges.windows(2).any(|w| w[1].0 < w[0].1) {
-            return Err(ColorError::InvalidProfile("overlapping tag data"));
-        }
-        let table = TagTable { data: bytes, tags };
+        let table = parse_tag_table(bytes)?;
         let has_lut_tags = LUT_TAGS.iter().any(|t| table.has(t));
 
         if &pcs_sig != b"XYZ " {

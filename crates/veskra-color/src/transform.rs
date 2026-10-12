@@ -96,7 +96,7 @@ impl Default for TransformOptions {
     }
 }
 
-fn rgb_parts(p: &IccProfile) -> Result<(Mat3, [ToneCurve; 3]), ColorError> {
+pub(crate) fn rgb_parts(p: &IccProfile) -> Result<(Mat3, [ToneCurve; 3]), ColorError> {
     if p.color_space() != ProfileColorSpace::Rgb {
         return Err(ColorError::WrongProfileKind("RgbTransform requires RGB profiles"));
     }
@@ -115,7 +115,7 @@ fn absolute_scale(src: &IccProfile, dst: &IccProfile) -> Result<Mat3, ColorError
     Ok(math::diag([ws[0] / wd[0], ws[1] / wd[1], ws[2] / wd[2]]))
 }
 
-fn destination_inverse(dst: &IccProfile, curves: &[ToneCurve; 3]) -> Result<Mat3, ColorError> {
+pub(crate) fn destination_inverse(dst: &IccProfile, curves: &[ToneCurve; 3]) -> Result<Mat3, ColorError> {
     if !curves.iter().all(ToneCurve::is_invertible) {
         return Err(ColorError::TransformFailure("destination tone curve is not invertible"));
     }
