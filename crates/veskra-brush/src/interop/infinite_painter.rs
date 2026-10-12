@@ -92,7 +92,7 @@ fn parse_json(bytes: &[u8], what: &str) -> Result<Map<String, Value>, BrushError
 }
 
 /// Clean a display string: control characters dropped, trimmed, at most 255 bytes.
-pub(crate) fn clean_name(s: &str) -> String {
+pub fn clean_name(s: &str) -> String {
     let mut out: String = s.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
     while out.len() > veskra_core::limits::MAX_NAME_BYTES {
         out.pop();

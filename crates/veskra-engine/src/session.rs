@@ -25,6 +25,7 @@ use veskra_doc::{
 use veskra_input::{InputAction, InputArbiter, InputConfig, RawPointerEvent, ViewTransform};
 use veskra_raster::{MaskGrid, MaskOp, TileGrid};
 
+mod brushes;
 mod raster_tools;
 mod tools;
 
@@ -140,7 +141,8 @@ pub struct Session {
     history: History,
     version: u64,
     saved_version: Option<u64>,
-    presets: Vec<BrushPreset>,
+    /// Built-in + user brushes and their assets (ADR-019).
+    library: crate::brushlib::BrushLibrary,
     brush: BrushPreset,
     color: ColorRgba,
     recent_colors: Vec<ColorRgba>,
@@ -180,8 +182,8 @@ impl Session {
             Some(s) => IdSource::Deterministic(veskra_core::ids::DeterministicIds::new(s)),
             None => IdSource::Random,
         };
-        let presets = veskra_brush::builtin_presets();
-        let brush = presets.iter().find(|p| p.id == "pencil.smooth").cloned().unwrap_or_else(|| presets[0].clone());
+        let library = crate::brushlib::BrushLibrary::new();
+        let brush = library.get("pencil.smooth").unwrap_or_default();
         Self {
             history: History::new(cfg.history),
             cfg,
@@ -189,7 +191,7 @@ impl Session {
             doc: None,
             version: 0,
             saved_version: None,
-            presets,
+            library,
             brush,
             color: ColorRgba::BLACK,
             recent_colors: Vec::new(),
@@ -496,19 +498,12 @@ impl Session {
                 Ok(self.finish_mutation(r))
             }
             Command::LayerList => Ok(self.receipt(self.layer_list()?)),
-            Command::BrushList => {
-                let list: Vec<Value> = self
-                    .presets
-                    .iter()
-                    .map(|p| json!({"id": p.id, "name": p.name, "vectorEligible": p.vector_eligible, "eraser": p.eraser}))
-                    .collect();
-                Ok(self.receipt(json!({"presets": list, "current": self.brush_json()})))
-            }
+            Command::BrushList => Ok(self.brush_list()),
             Command::BrushSelect { preset } => {
-                let p =
-                    self.presets.iter().find(|p| p.id == preset).cloned().ok_or_else(|| {
-                        VeskraError::new(ErrorCode::NotFound, format!("unknown brush preset {preset}"))
-                    })?;
+                let p = self
+                    .library
+                    .get(&preset)
+                    .ok_or_else(|| VeskraError::new(ErrorCode::NotFound, format!("unknown brush preset {preset}")))?;
                 self.brush = p;
                 Ok(self.receipt(json!({"current": self.brush_json()})))
             }
@@ -815,6 +810,16 @@ impl Session {
             Command::ShapePath { points, closed, smooth, fill } => {
                 self.shape_draw(crate::shape::path(&points, closed, smooth)?, fill)
             }
+            // ===== brush library (implemented in `session/brushes.rs`) =====
+            Command::BrushLibraryOpen { dir } => self.brush_library_open(&dir),
+            Command::BrushGet { id } => self.brush_get(&id),
+            Command::BrushSave { preset, assets } => self.brush_save(preset, assets),
+            Command::BrushDelete { id } => self.brush_delete(&id),
+            Command::BrushDuplicate { id, name } => self.brush_duplicate(&id, name.as_deref()),
+            Command::BrushImport { path } => self.brush_import(&path),
+            Command::BrushExport { id, path } => self.brush_export(&id, &path),
+            Command::BrushPreview { id, width, height } => self.brush_preview(&id, width, height),
+            Command::BrushAssetAdd { path, channel, invert } => self.brush_asset_add(&path, channel, invert),
         }
     }
 
@@ -905,6 +910,16 @@ impl Session {
             return Err(VeskraError::new(ErrorCode::InvalidState, "finish or cancel the current stroke first"));
         }
         let loaded = veskra_format::load(path)?;
+        let mut asset_warnings = Vec::new();
+        for (hash, png) in loaded.doc.iter_brush_assets() {
+            match veskra_brush::BrushAsset::from_stored_png(png) {
+                Ok(a) if a.hash() == hash => {}
+                _ => asset_warnings.push(format!(
+                    "Embedded brush image {}… is damaged: strokes keep their pixels, but re-rendering them falls back to a round tip.",
+                    &hash[..12.min(hash.len())]
+                )),
+            }
+        }
         let mut doc = loaded.doc;
         if doc.active_layer.is_none() {
             doc.active_layer =
@@ -922,6 +937,7 @@ impl Session {
         let mut r = self.receipt(self.info()?);
         r.invalidated.push(RectI::from_size(size.width, size.height));
         r.warnings = loaded.warnings.iter().map(|w| w.to_string()).collect();
+        r.warnings.extend(asset_warnings);
         r.history_changed = true;
         r.view_changed = true;
         Ok(r)
@@ -1155,7 +1171,8 @@ impl Session {
     fn brush_json(&self) -> Value {
         json!({"id": self.brush.id, "name": self.brush.name, "size": self.brush.size_px, "opacity": self.brush.opacity,
                "flow": self.brush.flow, "stabilization": self.brush.stabilization, "vectorEligible": self.brush.vector_eligible,
-               "eraser": self.brush.eraser})
+               "eraser": self.brush.eraser, "category": self.brush.category.as_str(),
+               "source": self.brush.source.as_string(), "version": self.brush.version})
     }
 
     fn view_json(&self) -> Value {

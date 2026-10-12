@@ -10,9 +10,12 @@
 //! unit variants, e.g. `document.info`) ignore extra keys — they have no argument to misspell —
 //! and `ExportOptions` (veskra-core) still ignores unknown fields.
 
+use crate::brushlib::AssetSpec;
 use crate::guide::GuideKind;
 use crate::symmetry::SymmetryMode;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use veskra_brush::MaskChannel;
 use veskra_core::export::{ExportFormat, ExportOptions};
 
 /// Where to place a layer, mirroring `veskra_doc::Placement` in JSON form.
@@ -589,6 +592,48 @@ pub enum Command {
         fill: bool,
     },
     // ===== END stroke-time tools =====
+    // ===== BEGIN brush library (ADR-019, session/brushes.rs; docs/COMMANDS.md "Brush library") =====
+    /// Load the user's brushes from an app-owned directory (bad files are skipped and reported).
+    #[serde(rename = "brush.library.open")]
+    BrushLibraryOpen { dir: String },
+    /// Full schema-3 preset JSON of a brush (for the editor).
+    #[serde(rename = "brush.get")]
+    BrushGet { id: String },
+    /// Create or update a custom brush; persisted as `<dir>/<id>.vbrush`.
+    #[serde(rename = "brush.save")]
+    BrushSave {
+        preset: serde_json::Value,
+        /// Images by the placeholder the preset references (`tip.image` / `texture.image`).
+        #[serde(default)]
+        assets: Option<BTreeMap<String, AssetSpec>>,
+    },
+    #[serde(rename = "brush.delete")]
+    BrushDelete { id: String },
+    #[serde(rename = "brush.duplicate")]
+    BrushDuplicate {
+        id: String,
+        #[serde(default)]
+        name: Option<String>,
+    },
+    /// Import `.vbrush`, `.prbr` or `.przp` (detected by content).
+    #[serde(rename = "brush.import")]
+    BrushImport { path: String },
+    /// Write a brush as `.vbrush`.
+    #[serde(rename = "brush.export")]
+    BrushExport { id: String, path: String },
+    /// Base64 PNG thumbnail of a standard stroke (synthetic pressure, never stored).
+    #[serde(rename = "brush.preview")]
+    BrushPreview { id: String, width: u32, height: u32 },
+    /// Convert a PNG into a brush asset stored in the library; returns its content hash.
+    #[serde(rename = "brush.asset.add")]
+    BrushAssetAdd {
+        path: String,
+        #[serde(default)]
+        channel: Option<MaskChannel>,
+        #[serde(default)]
+        invert: Option<bool>,
+    },
+    // ===== END brush library =====
 }
 
 fn default_dpi() -> f32 {
