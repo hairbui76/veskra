@@ -98,28 +98,43 @@
           <h3 data-i18n="feat.canvas.t">The canvas gets the screen</h3>
           <p data-i18n="feat.canvas.d">Controls float in the corners and a small dock holds brush, smudge, eraser and two colors. Everything else opens when you need it and closes when you are back to drawing.</p>
         </article>
-        <article class="card" style="--bg:#6EC3A0">
+        <article class="card" style="--bg:#F07882">
           <span class="card-no">B</span>
+          <h3 data-i18n="feat.brushes.t">30 brushes, and yours</h3>
+          <p data-i18n="feat.brushes.d">Pencils, inks, markers, paint, airbrush, chalk, pastel and more. Build your own in the brush editor — image tips, paper grain, pressure, tilt and speed curves, jitter — or import Infinite Painter brushes (.przp, .prbr).</p>
+        </article>
+        <article class="card" style="--bg:#6EC3A0">
+          <span class="card-no">C</span>
           <h3 data-i18n="feat.picker.t">Four ways to pick a color</h3>
           <p data-i18n="feat.picker.d">Hue wheel, HSB / RGB / LAB / CMYK sliders with hex, palettes including skin tones and your own, and a tone sphere for light and shade. Plus an eyedropper.</p>
         </article>
-        <article class="card" style="--bg:#F07882">
-          <span class="card-no">C</span>
+        <article class="card" style="--bg:#3CA0D2">
+          <span class="card-no">D</span>
           <h3 data-i18n="feat.tools.t">Tools that matter</h3>
           <p data-i18n="feat.tools.d">Fill, gradient, text, image import, line and ellipse rulers, stroke smoothing, shapes and pen paths, vertical / horizontal / radial symmetry, lasso, wand, transform, distort, color adjust, curves, crop and resize.</p>
         </article>
-        <article class="card" style="--bg:#3CA0D2">
-          <span class="card-no">D</span>
+        <article class="card" style="--bg:#FFFFFF">
+          <span class="card-no">E</span>
           <h3 data-i18n="feat.layers.t">Real layers</h3>
           <p data-i18n="feat.layers.d">Raster and vector layers with blend modes, opacity, lock transparency, clipping and masks. Strokes on vector layers stay editable paths all the way to Illustrator.</p>
         </article>
-        <article class="card" style="--bg:#FFFFFF">
-          <span class="card-no">E</span>
+        <article class="card" style="--bg:#FF6E2D">
+          <span class="card-no">F</span>
+          <h3 data-i18n="feat.print.t">Ready for print</h3>
+          <p data-i18n="feat.print.d">Export CMYK PSD and PDF through a FOGRA39 offset profile or your print shop's own .icc, with the total ink and the colors that cannot be printed exactly shown before you export.</p>
+        </article>
+        <article class="card" style="--bg:#FFD228">
+          <span class="card-no">G</span>
+          <h3 data-i18n="feat.handoff.t">Photoshop &amp; Illustrator handoff</h3>
+          <p data-i18n="feat.handoff.d">Layered PSD at 8 or 16 bits, and SVG / PDF for Illustrator with editable vector strokes, the original look, or both — every file carries its color profile.</p>
+        </article>
+        <article class="card" style="--bg:#6EC3A0">
+          <span class="card-no">H</span>
           <h3 data-i18n="feat.private.t">Offline and private</h3>
           <p data-i18n="feat.private.d">The app does not even ask for internet access. Your artwork stays on your device until you export it, with autosave and crash recovery.</p>
         </article>
-        <article class="card" style="--bg:#FF6E2D">
-          <span class="card-no">F</span>
+        <article class="card" style="--bg:#F07882">
+          <span class="card-no">I</span>
           <h3 data-i18n="feat.open.t">Open source</h3>
           <p data-i18n="feat.open.d">An independent Rust engine with a Kotlin / Jetpack Compose shell, MIT or Apache-2.0. Read it, build it, fork it.</p>
         </article>
@@ -158,6 +173,7 @@
           <li data-i18n="color.l1">PSD with layers, 8- or 16-bit</li>
           <li data-i18n="color.l2">SVG / PDF for Illustrator: editable vector strokes, the original look preserved, or both</li>
           <li data-i18n="color.l3">sRGB, Display P3 or Adobe RGB (1998) compatible output, converted relative colorimetric</li>
+          <li data-i18n="color.l5">CMYK for print in PSD and PDF: a FOGRA39 offset profile built in, or your printer's own .icc; relative colorimetric or perceptual, with black point compensation</li>
           <li data-i18n="color.l4">A summary before and after every export: vector paths, rasterized layers, clipped pixels</li>
         </ul>
         <p class="note" data-i18n="color.note">Honest note: a tablet screen is not a calibrated monitor. The canvas is sRGB, and what you see depends on your display — the exported file is what stays exact.</p>
@@ -167,6 +183,7 @@
         <div class="swatch" role="listitem" style="--c:#3CA0D2;--t:3deg"><div class="swatch-color"></div><b>sRGB</b><code>IEC 61966-2.1</code></div>
         <div class="swatch" role="listitem" style="--c:#FF6E2D;--t:-2deg"><div class="swatch-color"></div><b>Display P3</b><code>wide gamut · ICC</code></div>
         <div class="swatch" role="listitem" style="--c:#1E6E23;--t:5deg"><div class="swatch-color"></div><b>Adobe RGB (1998)</b><code>compatible · ICC</code></div>
+        <div class="swatch swatch-cmyk" role="listitem" style="--t:-1.5deg"><div class="swatch-color inks"><i style="--k:#00A0E3"></i><i style="--k:#E4007E"></i><i style="--k:#FFE600"></i><i style="--k:#1A1A1A"></i></div><b data-i18n="color.s5">CMYK for print</b><code>FOGRA39 · or your printer's .icc</code></div>
       </div>
     </section>
 

@@ -34,6 +34,7 @@ import org.veskra.kit.BlendMode
 import org.veskra.kit.BrushFiles
 import org.veskra.kit.BrushImportReport
 import org.veskra.kit.BrushInfo
+import org.veskra.kit.at
 import org.veskra.kit.with
 import org.veskra.kit.CanvasSpec
 import org.veskra.kit.Commands
@@ -1433,7 +1434,8 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
                 if (target == "tip") {
                     p.with("image", "tip", "shape").with(hash, "tip", "image")
                 } else {
-                    p.with("image", "texture", "source").with(hash, "texture", "image")
+                    val base = if (p.at("texture") is JsonObject) p else p.with(1f, "texture", "scale").with(0.5f, "texture", "depth").with(false, "texture", "invert").with("fixed", "texture", "mode")
+                    base.with("image", "texture", "source").with(hash, "texture", "image")
                 }
             }
         }

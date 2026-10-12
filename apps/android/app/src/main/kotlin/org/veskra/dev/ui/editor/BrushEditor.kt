@@ -298,7 +298,7 @@ private fun TextureTab(p: JsonObject, edit: ((JsonObject) -> JsonObject) -> Unit
     ) { s ->
         when (s) {
             "none" -> edit { it.with(JsonNull, "texture") }
-            "procedural" -> edit { it.with("procedural", "texture", "source").with(null as String?, "texture", "image") }
+            "procedural" -> edit { withTextureDefaults(it).with("procedural", "texture", "source").with(null as String?, "texture", "image") }
             "image" -> pickImage()
         }
     }
@@ -315,6 +315,14 @@ private fun TextureTab(p: JsonObject, edit: ((JsonObject) -> JsonObject) -> Unit
         ) { m -> edit { it.with(m, "texture", "mode") } }
     }
 }
+
+/** A new texture starts from the engine's defaults, written out so the sliders show them. */
+private fun withTextureDefaults(p: JsonObject): JsonObject =
+    if (p.at("texture") is JsonObject) {
+        p
+    } else {
+        p.with(2f, "texture", "scale").with(0.5f, "texture", "depth").with(false, "texture", "invert").with("fixed", "texture", "mode")
+    }
 
 @Composable
 private fun JitterTab(p: JsonObject, edit: ((JsonObject) -> JsonObject) -> Unit) {
