@@ -495,7 +495,11 @@ impl BrushLibrary {
         if serde_json::to_vec(&v).map_or(true, |b| b.len() > MAX_PRESET_JSON_BYTES) {
             return Err(VeskraError::alloc("preset JSON too large"));
         }
-        let load = load_preset_value(v).map_err(VeskraError::from)?;
+        // A malformed field in a command argument is the caller's error, not corrupt data.
+        let load = load_preset_value(v).map_err(|e| match e {
+            veskra_brush::BrushError::Parse(m) => VeskraError::invalid(format!("invalid preset: {m}")),
+            e => VeskraError::from(e),
+        })?;
         if !load.ignored_keys.is_empty() {
             return Err(VeskraError::invalid(format!("unknown preset field(s): {}", load.ignored_keys.join(", "))));
         }

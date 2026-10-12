@@ -220,6 +220,12 @@ fn save_update_duplicate_delete_export_import_round_trip() {
     // Strict input: unknown fields, unknown assets, built-in ids.
     assert_eq!(err(&mut s, json!({"cmd": "brush.save", "preset": {"name": "x", "sizee": 3}})), "invalid_argument");
     assert_eq!(
+        err(&mut s, json!({"cmd": "brush.save", "preset": {"name": "x", "size_px": "big"}})),
+        "invalid_argument"
+    );
+    assert_eq!(err(&mut s, json!({"cmd": "brush.save", "preset": {"name": "x", "spacing": 9}})), "invalid_argument");
+    assert_eq!(err(&mut s, json!({"cmd": "brush.save", "preset": {"schema": 4, "name": "x"}})), "unsupported_schema");
+    assert_eq!(
         err(
             &mut s,
             json!({"cmd": "brush.save", "preset": {"name": "x", "tip": {"shape": "image", "image": "0".repeat(64)}}})

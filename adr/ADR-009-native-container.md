@@ -3,6 +3,7 @@ Status: Accepted
 Date: 2026-10-09
 Owner: FMT
 Related tickets: FMT-01..05, SAV-001..009
+Amended by: ADR-019 (container schema 2: embedded brush assets, written only when used; schema 1 still read and written)
 
 ## Decision
 * Container: **ZIP** (PKZIP APPNOTE subset: local headers, central directory, STORE and DEFLATE only,

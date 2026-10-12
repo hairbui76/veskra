@@ -67,7 +67,9 @@ impl Session {
             .library
             .get(id)
             .ok_or_else(|| VeskraError::new(ErrorCode::NotFound, format!("unknown brush preset {id}")))?;
-        let preset = serde_json::to_value(&p).map_err(internal)?;
+        // Through the compact JSON text so f32 fields keep their short decimal form (0.35, not
+        // 0.3499999940395355); both parse back to the same f32.
+        let preset: Value = serde_json::from_str(&p.to_json_compact().map_err(VeskraError::from)?).map_err(internal)?;
         let assets: Vec<Value> = p
             .asset_refs()
             .iter()

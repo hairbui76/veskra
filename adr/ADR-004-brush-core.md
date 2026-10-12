@@ -3,6 +3,7 @@ Status: Accepted
 Date: 2026-10-09
 Owner: BRH
 Related tickets: SPK-04, BRH-01..07
+Amended by: ADR-019 (schema-3 presets: image tips, textures, jitter, dynamics, wet edges; paint mixing still deferred)
 
 ## Context
 Hokusai (MyPaint-inspired, fix15 linear tiles) is a candidate. Adopting it requires an Android
