@@ -742,7 +742,7 @@ impl Exporter for PngExporter {
     fn preflight(&self, doc: &Document, opts: &ExportOptions) -> ExportPreflight {
         let mut pf = ExportPreflight {
             format: self.format(),
-            options: *opts,
+            options: opts.clone(),
             blocked_reason: None,
             vector_path_count: 0,
             raster_only_stroke_count: raster_only_stroke_count(doc),
@@ -756,6 +756,8 @@ impl Exporter for PngExporter {
             bit_depth: opts.bit_depth,
             rendering_intent: None,
             gamut_clipping_possible: false,
+            total_area_coverage_max: None,
+            cmyk_profile: None,
         };
         if let Err(e) = opts.validate(self.format()) {
             pf.blocked_reason = Some(e.message);
@@ -844,6 +846,8 @@ impl Exporter for PngExporter {
             bit_depth: opts.bit_depth,
             rendering_intent: cp.intent(),
             out_of_gamut_pixels: cp.clipped(),
+            total_area_coverage_max: None,
+            cmyk_profile: None,
             profile: cp.label,
             profile_embedded: cp.embed.is_some(),
             vector_object_count: 0,

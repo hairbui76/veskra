@@ -35,6 +35,8 @@ silent no-op undo step. `invalidated` is guaranteed to cover every display pixel
 | `layer.list` | — | `{layers: [...]}` top-most first: id, parent, depth, kind, name, visible, opacity, blend, locked, alphaLocked, clip, passThrough, strokes, hasMask, vectorFidelity (`exact`\|`partially_vector`\|`raster`), active |
 | `brush.list` / `brush.select` / `brush.set` | — / `preset` / `size`?, `opacity`?, `flow`?, `stabilization`? | presets with `vectorEligible` |
 | `color.set` / `color.get` / `color.pick` | `hex` / — / `x`, `y`, `layer`? | sRGB hex; recent colors |
+| `color.convert` | `hex: "#RRGGBB"` + `to: "cmyk"`, **or** `cmyk: [c,m,y,k]` (each 0..=1) + `to: "srgb"`; `cmykProfile`?: path \| null (bundled), `intent`?: relative_colorimetric (default) \| perceptual, `blackPointCompensation`?: true (default) | to cmyk: `{cmyk: [c,m,y,k] (0..1, 4 decimals), inGamut, profile}`; to srgb: `{hex, clipped, profile}`. Read-only, no document needed, no undo step; see *CMYK* below |
+| `profile.inspect` | `path`?: path \| null (bundled CMYK profile) | `{description, copyright, class, colorSpace, pcs, version, intents, bytes, bundled, usableForCmykExport, reason}`; read-only; see *CMYK* below |
 | `stroke.begin` / `stroke.samples` / `stroke.commit` / `stroke.cancel` | `eraser`?, `tool`?: brush\|eraser\|smudge / `samples: [{x,y,t,p?,tilt?,azimuth?}]` | headless stroke path; omitted `p` = no hardware pressure (fallback 0.5, flag cleared); commit → `{committed, strokeId, strokeIds, skippedReplicas}` (see "Stroke-time tools") |
 | `history.undo` / `history.redo` | — | refused while a stroke is live |
 | `selection.rect` / `selection.ellipse` | `x0,y0,x1,y1`, `op`?: replace\|add\|subtract\|intersect | |
@@ -60,13 +62,20 @@ silent no-op undo step. `invalidated` is guaranteed to cover every display pixel
 `placement`: `{"at":"aboveActive"}` (default) \| `{"at":"top"}` \| `{"at":"above","id":…}` \|
 `{"at":"below","id":…}` \| `{"at":"into","group":…,"index":n?}`.
 
-`options` (`ExportOptions`): `{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0,"profile":"document","bitDepth":8}`.
-Every field after the three checkboxes is optional; JSON without `profile`/`bitDepth` behaves exactly as before
-(default-option files are byte-identical, pinned by `crates/veskra-io/tests/export_default_pin.rs`).
+`options` (`ExportOptions`): `{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0,"profile":"document","bitDepth":8,"cmykProfile":null,"renderingIntent":"relative_colorimetric","blackPointCompensation":true}`.
+Every field after the three checkboxes is optional; JSON without `profile`/`bitDepth`/`cmykProfile`/`renderingIntent`/
+`blackPointCompensation` behaves exactly as before (default-option files are byte-identical, pinned by
+`crates/veskra-io/tests/export_default_pin.rs`). Preflight echoes `options` with every field present.
 
 ### Export color options
 
-* `profile`: `"document"` (default) \| `"srgb"` \| `"display_p3"` \| `"adobe_rgb"`.
+* `profile`: `"document"` (default) \| `"srgb"` \| `"display_p3"` \| `"adobe_rgb"` \| `"cmyk"` (PSD and PDF only, see
+  *CMYK print export* below).
+* `renderingIntent`: `"relative_colorimetric"` (default) \| `"perceptual"`. Applies to every conversion. RGB
+  matrix/TRC profiles have no perceptual tables, so for RGB targets `perceptual` produces the same numbers as
+  relative colorimetric (as LittleCMS does) and the report keeps saying `"relative-colorimetric"`.
+* `blackPointCompensation`: `true` (default) \| `false`. Used by CMYK conversions. RGB conversions are unchanged by it
+  (every RGB profile Veskra writes has a zero black point, where BPC is the identity).
   * `document` keeps the document working space: PNG/PSD embed the document's ICC bytes and write the pixel
     values unconverted. Every document Veskra can author is sRGB, so this **is** sRGB output; for those documents
     `"srgb"` produces the identical file. (For a non-sRGB document, `document` stays lossless while `srgb`
@@ -96,6 +105,47 @@ Every field after the three checkboxes is optional; JSON without `profile`/`bitD
   counts when a destination linear-light channel leaves [0, 1] by more than 1e-4.
 * New warning kinds: `color_converted`, `gamut_clipped` (`count` = pixels or fill colors), `vector_colors_srgb`
   (`count` = paths), `bit_depth_reduced`.
+
+### CMYK print export, `color.convert`, `profile.inspect` (ADR-018)
+
+* `profile: "cmyk"` converts to CMYK with `cmykProfile` (absolute path of an ICC file of at most 32 MB) or, for
+  `null`, the bundled `Coated_Fogra39L_VIGC_300.icc` (FOGRA39L, 300 % TAC, X-Rite/VIGC, redistributed unaltered).
+  The file must be an ICC v2/v4 **output** (`prtr`) profile with data color space CMYK, a Lab or XYZ PCS and A2B/B2A
+  LUT tables (`mft1`, `mft2`, `mAB`/`mBA`). Source space: the document's RGB profile (sRGB). Default intent relative
+  colorimetric + black point compensation (Photoshop's default); `perceptual` uses the profile's perceptual tables.
+* **PSD**: color mode 4, 8 or 16 bit; every layer and the merged image converted; channels transparency, C, M, Y, K
+  (+ user mask), values **inverted** as Photoshop stores CMYK (255 / 65535 = no ink); merged image matted over paper
+  (ink · alpha); image resource 1039 = the CMYK profile bytes (when `embedColorProfile`); resolution resource as for
+  RGB. Veskra composites in RGB: layers with non-Normal blend modes get a `blend_mode_approximated` warning
+  (Photoshop recomposites CMYK layers in CMYK); the merged image is Veskra's render.
+* **PDF**: DeviceCMYK images (with the same soft masks) and `k` fill colors for editable vectors, DeviceCMYK
+  transparency groups, and — when embedding — `/OutputIntents [<< /S /GTS_PDFX … /DestOutputProfile >>]` with the
+  profile embedded once. Not claimed PDF/X conformant. "Editable vector strokes" / "Preserve original appearance"
+  keep their meaning.
+* **PNG / SVG** cannot carry CMYK: preflight `blockedReason` ("PNG cannot store CMYK. Export PSD or PDF …"),
+  `export.run` → `IncompatibleOutputProfile`.
+* `embedColorProfile: false` with CMYK is **allowed** (untagged CMYK, `profile_not_embedded` warning); untagged Display
+  P3 / Adobe RGB stays refused.
+* Bad `cmykProfile`: missing → `NotFound`; unreadable → `FilePermissionDenied` / `Io`; > 32 MB → `AllocationLimit`;
+  not an output profile or not CMYK → `UnsupportedColorMode`; corrupt / missing LUT tables → `InvalidProfile`; empty
+  string → `InvalidArgument`. Preflight reports the same message as `blockedReason`. Messages never contain the path.
+* `ExportPreflight` / `ExportReport` for CMYK: `targetProfile` = profile description, `renderingIntent` =
+  `"relative-colorimetric"` \| `"perceptual"`, `gamutClippingPossible: true`, `totalAreaCoverageMax` = max C+M+Y+K in
+  percent over painted pixels (preflight: estimated from whole 64-px bands of the composite, at most 4 Mpx, every
+  band when the document is ≤ 4 Mpx; report: exact over the flattened image / all PDF images, unmatted color, from the
+  16-bit conversion), `cmykProfile: {description, bundled}`, `outOfGamutPixels` = pixels whose color does not survive
+  RGB → CMYK → RGB within ΔE00 2 (PSD: merged image; PDF: all images; vector fills are counted in a warning).
+  `totalAreaCoverageMax` and `cmykProfile` are `null` for RGB targets.
+* `color.convert` (sRGB working space): `to: "cmyk"` → `inGamut` = the color survives RGB → CMYK → RGB within
+  ΔE00 ≤ 2 (the black point mapping is undone exactly, so with BPC sRGB black is in gamut). `to: "srgb"` → `clipped` =
+  the CMYK color lies outside sRGB (a linear channel beyond [0, 1] by more than 1e-4) and was clipped. Single colors use
+  the full-precision pipeline (no device link). Transforms are cached per session by (path, intent, BPC) and the file's
+  length + modification time (warm call ≈ 5 µs through the JSON boundary on the desktop test host).
+* `profile.inspect`: never fails for a merely unsuitable profile (`usableForCmykExport: false`, `reason` says why);
+  unreadable or structurally invalid files are errors (`NotFound`, `InvalidProfile`, …). `class` is the ICC device
+  class signature (`prtr`, `mntr`, `scnr`, `spac`, `abst`, `link`, `nmcl`), `colorSpace` / `pcs` the unpadded
+  signatures, `intents` the intents the profile has tables for (A2Bx/B2Ax; all three for matrix/TRC profiles),
+  `version` `"major.minor"`.
 
 Color accuracy is a measured property of these conversions (see docs/COMPATIBILITY.md §2), not a promise that
 other applications or displays will show identical colors.

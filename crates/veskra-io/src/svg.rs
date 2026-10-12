@@ -351,6 +351,8 @@ impl Exporter for SvgExporter {
             bit_depth: 8,
             rendering_intent: color.intent(ExportFormat::Svg),
             out_of_gamut_pixels: color.clipped_pixels(),
+            total_area_coverage_max: None,
+            cmyk_profile: None,
             duration_ms: start.elapsed().as_millis() as u64,
             file_bytes: svg.len() as u64,
             width_px: doc.width(),

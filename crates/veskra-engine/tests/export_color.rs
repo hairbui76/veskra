@@ -125,14 +125,24 @@ fn invalid_color_options_are_blocked_with_typed_errors() {
     };
     // Unknown profile / wrong types never reach the exporter.
     for o in [
-        with("profile", json!("cmyk")),
+        with("profile", json!("lab")),
         with("profile", json!(3)),
         with("bitDepth", json!("16")),
         with("bitDepth", json!(-8)),
+        with("renderingIntent", json!("saturation")),
+        with("blackPointCompensation", json!("yes")),
     ] {
         let e = err(&mut s, json!({"cmd": "export.preflight", "format": "png", "options": o}));
         assert_eq!(e["code"], "InvalidArgument", "{o}");
     }
+    // CMYK (ADR-018) is a valid target, but PNG cannot carry it: preflight explains, run refuses.
+    let o = with("profile", json!("cmyk"));
+    let pf = ok(&mut s, json!({"cmd": "export.preflight", "format": "png", "options": o}));
+    assert!(pf["blockedReason"].as_str().unwrap().contains("CMYK"), "{pf}");
+    let path = tmp("cmyk.png");
+    let e = err(&mut s, json!({"cmd": "export.run", "format": "png", "path": path.to_string_lossy(), "options": o}));
+    assert_eq!(e["code"], "IncompatibleOutputProfile");
+    assert!(!path.exists());
     // Unsupported depth: preflight explains, run refuses, no file appears.
     let o = with("bitDepth", json!(12));
     let pf = ok(&mut s, json!({"cmd": "export.preflight", "format": "png", "options": o}));

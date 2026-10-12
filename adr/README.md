@@ -25,3 +25,4 @@ Such ADRs stay provisional until QAP attaches that evidence; they must not be ci
 | [015](ADR-015-min-hardware.md) | Minimum hardware | Proposed (blocked) |
 | [016](ADR-016-core-contracts.md) | Frozen core contracts (ARC-01) | Accepted |
 | [017](ADR-017-tool-set-and-export-color.md) | Painter tool set and export color targets (amends 013 for export) | Accepted (provisional) |
+| [018](ADR-018-cmyk-output.md) | CMYK output: LUT output profiles, PSD/PDF CMYK export, CMYK picker (amends 006, 017) | Accepted (provisional) |

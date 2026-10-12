@@ -54,5 +54,9 @@ decision ADR-013 had deferred: converting to an output color space other than th
 QAP must attach that evidence before this ADR is cited as verified or the color claims appear in
 release notes (AGENTS.md §3: no "no color shift" claims).
 
+## Amendment
+2026-10-12: ADR-018 adds the `cmyk` export target (PSD, PDF) and the `renderingIntent` /
+`blackPointCompensation` options; RGB targets keep their behaviour and bytes.
+
 ## Review
 Owner 2026-10-10 (scope and export color options approved in the working session).

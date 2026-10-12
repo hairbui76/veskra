@@ -11,6 +11,8 @@ distribution.
 | `expected_conversions.json` | `scripts/color/gen_oracle_fixtures.py`: LittleCMS (Pillow ImageCms) transform outputs, colour-science Lab/CIEDE2000 values, profile validation results. Tool versions are recorded inside the file. | Generated test data (MIT OR Apache-2.0). |
 | `srgb_swatches.csv` | Same script: 183 swatch RGB values chosen by Veskra + colour-science Lab D50. | Generated test data (MIT OR Apache-2.0). |
 | `color_report.json` | `crates/veskra-color/tests/oracle.rs::color_report` with `VESKRA_WRITE_COLOR_REPORT=1`. | Generated test data (MIT OR Apache-2.0). |
+| `icc/veskra-synthetic-cmyk-v4.icc` | Written by `scripts/color/gen_cmyk_oracle.py`: a deterministic ICC v4.3 CMYK output profile with `mAB`/`mBA` tags built from a toy subtractive model (header date fixed to 2026-01-01). It describes no real printing condition; test input for the v4 LUT parser only. | Veskra project data (MIT OR Apache-2.0). Its `cprt` reads "No copyright, use freely". |
+| `cmyk_expected.json` | `scripts/color/gen_cmyk_oracle.py`: LittleCMS 2.19 (Pillow 12.3.0 `ImageCms`) outputs for the bundled CMYK profile `crates/veskra-color/profiles/Coated_Fogra39L_VIGC_300.icc` (not copied here; its terms are in `crates/veskra-color/profiles/README.md`) and for the synthetic profile above. Tool versions are recorded inside the file. | Generated test data (MIT OR Apache-2.0). |
 
 The CIEDE2000 reference pairs typed into `crates/veskra-color/src/lab.rs` and the script are the
 factual numeric values of Table 1 in G. Sharma, W. Wu, E. N. Dalal, "The CIEDE2000

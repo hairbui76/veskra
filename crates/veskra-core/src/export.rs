@@ -44,12 +44,15 @@ impl ExportFormat {
     }
 }
 
-/// Target color space of an export (owner-approved contract extension, 2026-10-10).
+/// Target color space of an export (owner-approved contract extension, 2026-10-10; `cmyk` added
+/// by ADR-018).
 ///
-/// Pixels are converted from the document working space with the **relative colorimetric**
-/// intent (matrix/TRC profiles; out-of-gamut colors are clipped per channel and counted in the
-/// report) and the matching ICC profile is embedded. When the document already is in the
-/// target space nothing is converted and the document's own profile bytes are embedded.
+/// Pixels are converted from the document working space with [`ExportOptions::rendering_intent`]
+/// (RGB matrix/TRC profiles: perceptual behaves as relative colorimetric, out-of-gamut colors are
+/// clipped per channel and counted in the report) and the matching ICC profile is embedded. When
+/// the document already is in the target space nothing is converted and the document's own
+/// profile bytes are embedded. `cmyk` converts to the CMYK output profile
+/// [`ExportOptions::cmyk_profile`] (PSD and PDF only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -65,6 +68,10 @@ pub enum ExportProfile {
     DisplayP3,
     /// Veskra's generated profile with the colorimetry of Adobe RGB (1998).
     AdobeRgb,
+    /// CMYK through a LUT-based ICC output profile (`cmykProfile`, default: the bundled
+    /// Coated FOGRA39 profile). PSD (color mode 4) and PDF (DeviceCMYK + output intent) only;
+    /// PNG and SVG cannot carry CMYK and are refused.
+    Cmyk,
 }
 
 impl ExportProfile {
@@ -75,7 +82,13 @@ impl ExportProfile {
             ExportProfile::Srgb => "srgb",
             ExportProfile::DisplayP3 => "display_p3",
             ExportProfile::AdobeRgb => "adobe_rgb",
+            ExportProfile::Cmyk => "cmyk",
         }
+    }
+
+    /// The CMYK print target.
+    pub fn is_cmyk(self) -> bool {
+        self == ExportProfile::Cmyk
     }
 
     /// A wide-gamut target whose values are meaningless without the embedded profile.
@@ -84,8 +97,50 @@ impl ExportProfile {
     }
 }
 
+/// Rendering intent of the color conversions an export performs (ADR-018).
+///
+/// For LUT-based CMYK profiles the intent selects the profile's tables (`B2A1`/`A2B1` for
+/// relative colorimetric, `B2A0`/`A2B0` for perceptual). RGB matrix/TRC profiles carry no
+/// perceptual tables, so `perceptual` produces the same numbers as `relative_colorimetric` there
+/// (as LittleCMS does); only the reported intent differs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ExportIntent {
+    /// Media-relative colorimetric (default; Photoshop's default for CMYK conversions).
+    #[default]
+    RelativeColorimetric,
+    /// Perceptual (the profile's gamut-compressing tables).
+    Perceptual,
+}
+
+impl ExportIntent {
+    /// Stable machine name (same as the serialized form).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExportIntent::RelativeColorimetric => "relative_colorimetric",
+            ExportIntent::Perceptual => "perceptual",
+        }
+    }
+}
+
+/// Longest `cmykProfile` path accepted (bytes).
+pub const MAX_PROFILE_PATH_BYTES: usize = 4096;
+
+/// Identity of the CMYK output profile used by an export (preflight and report).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CmykProfileInfo {
+    /// Profile description (`desc` tag).
+    pub description: String,
+    /// `true` for the profile bundled with Veskra (`cmykProfile: null`).
+    pub bundled: bool,
+}
+
 /// The three independent toggles of the export sheet (MASTER_PLAN §2.3) plus the color target.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// Not `Copy` since ADR-018 added the `cmykProfile` path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportOptions {
     /// `[x] Editable vector strokes` (default true).
@@ -104,10 +159,27 @@ pub struct ExportOptions {
     /// always write 8-bit images and report that.
     #[serde(default = "eight")]
     pub bit_depth: u8,
+    /// CMYK output profile file (absolute path) for `profile: "cmyk"`; `None` = the bundled
+    /// Coated FOGRA39 profile. Ignored for other targets.
+    #[serde(default)]
+    pub cmyk_profile: Option<String>,
+    /// Intent of every conversion (default relative colorimetric). RGB matrix/TRC conversions
+    /// produce identical numbers for both intents.
+    #[serde(default)]
+    pub rendering_intent: ExportIntent,
+    /// Black point compensation (default `true`) for CMYK conversions. RGB matrix/TRC
+    /// conversions are unaffected (Veskra's RGB profiles all have a zero black point, where BPC is
+    /// the identity), so RGB output keeps its exact bytes.
+    #[serde(default = "yes")]
+    pub black_point_compensation: bool,
 }
 
 fn one() -> f32 {
     1.0
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn eight() -> u8 {
@@ -123,6 +195,9 @@ impl Default for ExportOptions {
             raster_scale: 1.0,
             profile: ExportProfile::Document,
             bit_depth: 8,
+            cmyk_profile: None,
+            rendering_intent: ExportIntent::RelativeColorimetric,
+            black_point_compensation: true,
         }
     }
 }
@@ -149,7 +224,39 @@ impl ExportOptions {
                 "A Display P3 or Adobe RGB export must embed its color profile; enable 'Embed color profile' or choose sRGB.",
             ));
         }
+        if self.profile.is_cmyk() {
+            match format {
+                ExportFormat::Png => {
+                    return Err(VeskraError::new(
+                        ErrorCode::IncompatibleOutputProfile,
+                        "PNG cannot store CMYK. Export PSD or PDF for print, or choose an RGB profile (sRGB, Display P3, Adobe RGB).",
+                    ));
+                }
+                ExportFormat::Svg => {
+                    return Err(VeskraError::new(
+                        ErrorCode::IncompatibleOutputProfile,
+                        "SVG cannot store CMYK colors. Export PDF (for Illustrator) or PSD for print, or choose an RGB profile.",
+                    ));
+                }
+                _ => {}
+            }
+            if let Some(p) = &self.cmyk_profile {
+                if p.trim().is_empty() {
+                    return Err(VeskraError::invalid(
+                        "cmykProfile must be the path of an ICC file, or null for the bundled profile",
+                    ));
+                }
+                if p.len() > MAX_PROFILE_PATH_BYTES {
+                    return Err(VeskraError::invalid("cmykProfile path is too long"));
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Whether this export converts to CMYK.
+    pub fn is_cmyk(&self) -> bool {
+        self.profile.is_cmyk()
     }
 }
 
@@ -232,6 +339,14 @@ pub struct ExportPreflight {
     /// The document's colors can fall outside the target gamut (clipping is counted on export).
     #[serde(default)]
     pub gamut_clipping_possible: bool,
+    /// CMYK only: estimated maximum total area coverage (C+M+Y+K in percent, 0–400) of the
+    /// converted image, from a downsampled composite (the report has the exact value); `None`
+    /// for RGB targets or when blocked.
+    #[serde(default)]
+    pub total_area_coverage_max: Option<f64>,
+    /// CMYK only: the output profile that will be used.
+    #[serde(default)]
+    pub cmyk_profile: Option<CmykProfileInfo>,
 }
 
 /// Validation outcome for a written file.
@@ -275,9 +390,17 @@ pub struct ExportReport {
     #[serde(default)]
     pub rendering_intent: Option<String>,
     /// Pixels (alpha > 0) of the written image(s) whose color was outside the target gamut and
-    /// was clipped. PNG/PSD: the flattened image; SVG/PDF: all embedded raster images.
+    /// was clipped. PNG/PSD: the flattened image; SVG/PDF: all embedded raster images. CMYK: a
+    /// color counts when it does not survive RGB → CMYK → RGB within ΔE00 2 (ADR-018).
     #[serde(default)]
     pub out_of_gamut_pixels: u64,
+    /// CMYK only: maximum total area coverage (C+M+Y+K in percent) over the written CMYK pixels
+    /// (alpha > 0, unmatted color); `None` for RGB targets.
+    #[serde(default)]
+    pub total_area_coverage_max: Option<f64>,
+    /// CMYK only: the output profile used.
+    #[serde(default)]
+    pub cmyk_profile: Option<CmykProfileInfo>,
 }
 
 #[cfg(test)]
@@ -307,7 +430,7 @@ mod tests {
         let j = serde_json::to_string(&ExportOptions::default()).unwrap();
         assert_eq!(
             j,
-            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0,"profile":"document","bitDepth":8}"#
+            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"rasterScale":1.0,"profile":"document","bitDepth":8,"cmykProfile":null,"renderingIntent":"relative_colorimetric","blackPointCompensation":true}"#
         );
         let o: ExportOptions = serde_json::from_str(
             r#"{"includeVectorPaths":false,"includeRasterAppearance":true,"embedColorProfile":false}"#,
@@ -323,10 +446,52 @@ mod tests {
         .unwrap();
         assert_eq!((o.profile, o.bit_depth), (ExportProfile::DisplayP3, 16));
         assert!(o.validate(ExportFormat::Png).is_ok());
-        assert!(serde_json::from_str::<ExportOptions>(
-            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"cmyk"}"#
+        // Old JSON keeps the old color behaviour: relative colorimetric, BPC on (no-op for RGB).
+        assert_eq!(o.cmyk_profile, None);
+        assert_eq!(o.rendering_intent, ExportIntent::RelativeColorimetric);
+        assert!(o.black_point_compensation);
+        let o: ExportOptions = serde_json::from_str(
+            r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"cmyk","cmykProfile":"/p/x.icc","renderingIntent":"perceptual","blackPointCompensation":false}"#,
         )
-        .is_err());
+        .unwrap();
+        assert_eq!(o.profile, ExportProfile::Cmyk);
+        assert_eq!(o.cmyk_profile.as_deref(), Some("/p/x.icc"));
+        assert_eq!(o.rendering_intent, ExportIntent::Perceptual);
+        assert!(!o.black_point_compensation);
+        assert!(
+            serde_json::from_str::<ExportOptions>(
+                r#"{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"renderingIntent":"saturation"}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn cmyk_options_are_validated() {
+        let o = ExportOptions { profile: ExportProfile::Cmyk, ..Default::default() };
+        for f in [ExportFormat::Png, ExportFormat::Svg] {
+            let e = o.validate(f).unwrap_err();
+            assert_eq!(e.code, ErrorCode::IncompatibleOutputProfile);
+            assert!(e.message.contains("CMYK"), "{e:?}");
+        }
+        for f in [ExportFormat::Psd, ExportFormat::Pdf] {
+            assert!(o.validate(f).is_ok());
+            // Untagged CMYK is allowed (common in print workflows; the exporter warns).
+            assert!(ExportOptions { embed_color_profile: false, ..o.clone() }.validate(f).is_ok());
+            assert!(ExportOptions { bit_depth: 16, ..o.clone() }.validate(f).is_ok());
+            let empty = ExportOptions { cmyk_profile: Some("  ".into()), ..o.clone() };
+            assert_eq!(empty.validate(f).unwrap_err().code, ErrorCode::InvalidArgument);
+            let long = ExportOptions { cmyk_profile: Some("x".repeat(MAX_PROFILE_PATH_BYTES + 1)), ..o.clone() };
+            assert_eq!(long.validate(f).unwrap_err().code, ErrorCode::InvalidArgument);
+        }
+        // A stale path is ignored for RGB targets.
+        let rgb = ExportOptions { cmyk_profile: Some(String::new()), ..Default::default() };
+        assert!(rgb.validate(ExportFormat::Png).is_ok());
+        assert_eq!(ExportProfile::Cmyk.as_str(), "cmyk");
+        assert_eq!(serde_json::to_string(&ExportIntent::Perceptual).unwrap(), "\"perceptual\"");
+        assert_eq!(ExportIntent::RelativeColorimetric.as_str(), "relative_colorimetric");
+        let info = CmykProfileInfo { description: "d".into(), bundled: true };
+        assert_eq!(serde_json::to_string(&info).unwrap(), r#"{"description":"d","bundled":true}"#);
     }
 
     #[test]

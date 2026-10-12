@@ -4,9 +4,10 @@
 //! mask information incl. every layer record, tagged block and channel image data, global layer
 //! mask info, merged image data) and decodes every RLE row to its exact width. It shares no code
 //! with the writer except the PackBits row decoder's counterpart (which has its own unit tests).
-//! Scope: version-1 PSD, RGB, 8 or 16 bits per channel (16-bit layer info in an `Lr16` block) —
-//! the subset the writer emits. For 16-bit files every decoded plane holds two big-endian bytes
-//! per sample.
+//! Scope: version-1 PSD, RGB (mode 3) or CMYK (mode 4), 8 or 16 bits per channel (16-bit layer
+//! info in an `Lr16` block) — the subset the writer emits. For 16-bit files every decoded plane
+//! holds two big-endian bytes per sample. Layer records must carry exactly the color channels of
+//! the mode (`0..=2` or `0..=3`), at most one transparency (`-1`) and user mask (`-2`) channel.
 
 use super::packbits;
 use veskra_core::{ErrorCode, RectI, VeskraError};
@@ -165,7 +166,12 @@ fn read_pascal(c: &mut Cur, pad: usize, w: &str) -> Result<String, VeskraError> 
 
 /// Parse layer records and their channel image data (`bps` = bytes per sample). Returns the raw
 /// signed layer count and the layers in file order.
-fn parse_layer_info(li: &mut Cur, bps: usize, keep_pixels: bool) -> Result<(i16, Vec<PsdLayerInfo>), VeskraError> {
+fn parse_layer_info(
+    li: &mut Cur,
+    bps: usize,
+    color_channels: i16,
+    keep_pixels: bool,
+) -> Result<(i16, Vec<PsdLayerInfo>), VeskraError> {
     let mut layers: Vec<PsdLayerInfo> = Vec::new();
     let layer_count_raw = li.u16("layer count")? as i16;
     let n = layer_count_raw.unsigned_abs() as usize;
@@ -176,13 +182,19 @@ fn parse_layer_info(li: &mut Cur, bps: usize, keep_pixels: bool) -> Result<(i16,
         if nch > 56 {
             return Err(bad("layer channel count"));
         }
-        let mut ch = Vec::with_capacity(nch);
+        let mut ch: Vec<(i16, u32)> = Vec::with_capacity(nch);
         for _ in 0..nch {
             let id = li.u16("channel id")? as i16;
-            if !(-3..=55).contains(&id) {
-                return Err(bad("channel id"));
+            if !(-2..color_channels).contains(&id) {
+                return Err(bad("channel id does not belong to the color mode"));
+            }
+            if ch.iter().any(|(c, _)| *c == id) {
+                return Err(bad("duplicate channel id"));
             }
             ch.push((id, li.u32("channel length")?));
+        }
+        if (0..color_channels).any(|c| !ch.iter().any(|(id, _)| *id == c)) {
+            return Err(bad("layer record lacks a color channel of the mode"));
         }
         if &li.sig("blend signature")? != b"8BIM" {
             return Err(bad("blend mode signature"));
@@ -327,8 +339,14 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
     if !(1..=30_000).contains(&width) || !(1..=30_000).contains(&height) {
         return Err(bad("dimensions"));
     }
-    if !matches!(depth, 8 | 16) || color_mode != 3 || channels < 3 {
-        return Err(bad("only 8-bit and 16-bit RGB are produced by Veskra"));
+    // Color modes Veskra writes: 3 = RGB (≥ 3 channels), 4 = CMYK (≥ 4 channels, ADR-018).
+    let min_channels = match color_mode {
+        3 => 3,
+        4 => 4,
+        _ => return Err(bad("only RGB (mode 3) and CMYK (mode 4) are produced by Veskra")),
+    };
+    if !matches!(depth, 8 | 16) || channels < min_channels {
+        return Err(bad("only 8-bit and 16-bit RGB or CMYK are produced by Veskra"));
     }
     let bps = depth as usize / 8;
     let cm_len = c.u32("color mode data")? as usize;
@@ -365,7 +383,7 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
             if depth != 8 {
                 return Err(bad("16-bit layer info must be stored in an Lr16 block"));
             }
-            (layer_count_raw, layers) = parse_layer_info(&mut li, 1, keep_pixels)?;
+            (layer_count_raw, layers) = parse_layer_info(&mut li, 1, min_channels as i16, keep_pixels)?;
         }
         if lm.rest() > 0 {
             let g = lm.u32("global mask length")? as usize;
@@ -384,7 +402,7 @@ pub fn inspect_psd(bytes: &[u8], keep_pixels: bool) -> Result<PsdInfo, VeskraErr
                     return Err(bad("unexpected Lr16 block"));
                 }
                 let mut li = Cur { b: data, p: 0 };
-                (layer_count_raw, layers) = parse_layer_info(&mut li, 2, keep_pixels)?;
+                (layer_count_raw, layers) = parse_layer_info(&mut li, 2, min_channels as i16, keep_pixels)?;
             }
         }
     }

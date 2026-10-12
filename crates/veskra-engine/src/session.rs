@@ -25,6 +25,7 @@ use veskra_doc::{
 use veskra_input::{InputAction, InputArbiter, InputConfig, RawPointerEvent, ViewTransform};
 use veskra_raster::{MaskGrid, MaskOp, TileGrid};
 
+mod color_tools;
 mod raster_tools;
 mod tools;
 
@@ -154,6 +155,8 @@ pub struct Session {
     doc_path: Option<PathBuf>,
     /// Stroke-time tool state: symmetry, guide, tool, smudge strength (not saved in documents).
     tools: tools::ToolState,
+    /// sRGB ↔ CMYK transforms for `color.convert` (ADR-018), cached per (profile, intent, BPC).
+    cmyk_cache: color_tools::CmykCache,
 }
 
 impl std::fmt::Debug for Session {
@@ -201,6 +204,7 @@ impl Session {
             hover: None,
             doc_path: None,
             tools: tools::ToolState::default(),
+            cmyk_cache: color_tools::CmykCache::default(),
         }
     }
 
@@ -548,6 +552,10 @@ impl Session {
                 }
                 Ok(self.receipt(json!({"picked": c.to_hex(), "color": self.color.to_hex()})))
             }
+            Command::ColorConvert { hex, cmyk, to, cmyk_profile, intent, black_point_compensation } => {
+                self.color_convert(hex, cmyk, to, cmyk_profile, intent, black_point_compensation)
+            }
+            Command::ProfileInspect { path } => self.profile_inspect(path),
             Command::StrokeBegin { eraser, tool } => {
                 self.begin_stroke_with(tools::BeginOpts { eraser, tool, shape: None })?;
                 Ok(self.receipt(json!({})))

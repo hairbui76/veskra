@@ -15,6 +15,11 @@ pub const MAX_GROUP_DEPTH: usize = 32;
 pub const MAX_STROKE_SAMPLES: usize = 500_000;
 /// Maximum ICC profile size accepted from any input.
 pub const MAX_ICC_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum size of a CMYK **output** profile chosen for print export (`cmykProfile`, ADR-018).
+/// LUT-based press profiles are large (the bundled FOGRA39 profile is 8.6 MB); this limit only
+/// applies to profiles the user selects as an export target, never to profiles read from
+/// imported documents or `.veskra` files ([`MAX_ICC_BYTES`]).
+pub const MAX_OUTPUT_PROFILE_BYTES: usize = 32 * 1024 * 1024;
 /// Maximum size of any single decompressed entry inside a native bundle.
 pub const MAX_BUNDLE_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
 /// Maximum total decompressed size of a native bundle.

@@ -13,7 +13,17 @@
 use crate::guide::GuideKind;
 use crate::symmetry::SymmetryMode;
 use serde::{Deserialize, Serialize};
-use veskra_core::export::{ExportFormat, ExportOptions};
+use veskra_core::export::{ExportFormat, ExportIntent, ExportOptions};
+
+/// `color.convert` target space (ADR-018).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorTargetSpec {
+    /// sRGB `#RRGGBB` → CMYK through the output profile.
+    Cmyk,
+    /// CMYK → sRGB `#RRGGBB`.
+    Srgb,
+}
 
 /// Where to place a layer, mirroring `veskra_doc::Placement` in JSON form.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -292,6 +302,30 @@ pub enum Command {
         y: f32,
         #[serde(default)]
         layer: bool,
+    },
+    /// Read-only sRGB ↔ CMYK conversion for the color picker (ADR-018): `hex` + `to: "cmyk"`, or
+    /// `cmyk` (components 0..=1) + `to: "srgb"`. No document needed, no undo step.
+    #[serde(rename = "color.convert")]
+    ColorConvert {
+        #[serde(default)]
+        hex: Option<String>,
+        #[serde(default)]
+        cmyk: Option<[f64; 4]>,
+        to: ColorTargetSpec,
+        /// CMYK output profile file; `None` = the bundled profile.
+        #[serde(default)]
+        cmyk_profile: Option<String>,
+        #[serde(default)]
+        intent: ExportIntent,
+        #[serde(default = "default_true")]
+        black_point_compensation: bool,
+    },
+    /// Read-only description of an ICC profile file (`None` = the bundled CMYK profile) and whether
+    /// it can be used for CMYK export.
+    #[serde(rename = "profile.inspect")]
+    ProfileInspect {
+        #[serde(default)]
+        path: Option<String>,
     },
 
     // ----- strokes (headless path; Android uses the packed input batch) -----

@@ -109,6 +109,22 @@ fn render_export_inspect_and_compare() {
         let i = ok(&["inspect-export", &out]);
         assert_eq!(i["structurallyValid"], true);
     }
+    // CMYK print export (ADR-018): PSD and PDF; PNG/SVG refused; flags reach the options.
+    for ext in ["psd", "pdf"] {
+        let out = tmp(&format!("print.{ext}"));
+        let v = ok(&["export", &doc, &out, "--profile", "cmyk", "--intent", "perceptual", "--no-bpc"]);
+        assert_eq!(v["report"]["validation"], "structurally_validated", "{ext}: {v}");
+        assert_eq!(v["report"]["renderingIntent"], "perceptual");
+        assert_eq!(v["report"]["cmykProfile"]["bundled"], true);
+        assert_eq!(v["preflight"]["options"]["blackPointCompensation"], false);
+        assert!(v["report"]["totalAreaCoverageMax"].as_f64().is_some());
+    }
+    assert!(fails(&["export", &doc, &tmp("print.png"), "--profile", "cmyk"]).contains("CMYK"));
+    let e = fails(&["export", &doc, &tmp("x.psd"), "--profile", "cmyk", "--cmyk-profile", &tmp("none.icc")]);
+    assert!(e.contains("not_found") || e.contains("not found"), "{e}");
+    assert!(
+        fails(&["export", &doc, &tmp("x.psd"), "--profile", "cmyk", "--intent", "saturation"]).contains("--intent")
+    );
     let no_vec = tmp("raster-only.svg");
     ok(&["export", &doc, &no_vec, "--no-vector", "--no-icc"]);
     assert!(!fails(&["export", &doc, &tmp("both-off.svg"), "--no-vector", "--no-raster"]).is_empty());

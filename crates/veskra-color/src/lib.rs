@@ -10,9 +10,16 @@
 //! * [`lab`]: CIELAB D50 and CIEDE2000 for numeric fidelity checks.
 //! * [`convert`]: the single implementation of all alpha/bit-depth conversions (CONTRACTS §1).
 //!
-//! LUT-based profiles (CMYK, A2B-only) are rejected with typed errors rather than approximated.
-//! Accuracy against LittleCMS and colour-science is measured in `docs/reports/color-baseline.md`.
+//! * [`cmyk`] (ADR-018): LUT-based CMYK **output** profiles (`mft1`/`mft2`/`mAB `/`mBA `, parsed by
+//!   [`icc::lut`]), the bundled Coated FOGRA39 profile, RGB ↔ CMYK transforms with LittleCMS-style
+//!   black point compensation and a precomputed device link for bulk conversion.
+//!
+//! RGB/Gray working profiles stay matrix/TRC: [`IccProfile::parse`] still rejects LUT-only and
+//! CMYK profiles with typed errors; CMYK is an export target only ([`cmyk::CmykProfile`]).
+//! Accuracy against LittleCMS and colour-science is measured in `docs/reports/color-baseline.md`
+//! and, for CMYK, in `tests/cmyk_oracle.rs` (ADR-018).
 
+pub mod cmyk;
 pub mod convert;
 pub mod error;
 pub mod icc;
@@ -21,6 +28,7 @@ pub mod math;
 pub mod transfer;
 pub mod transform;
 
+pub use cmyk::{CmykProfile, CmykTransform};
 pub use error::ColorError;
 pub use icc::IccProfile;
 pub use transform::{RenderingIntent, RgbTransform};

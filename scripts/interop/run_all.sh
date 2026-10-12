@@ -7,6 +7,8 @@
 #   1. tool versions                                   -> target/interop/tools.json
 #   2. PNG fixtures + Pillow oracle (cargo test veskra-io png_export; then png_check.py directly)
 #   3. PSD fixtures + psd-tools/ImageMagick (cargo test veskra-io psd_interop; then psd_check.py directly)
+#  3b. CMYK PSD/PDF exports (ADR-018): psd-tools mode/depth/ICC, LittleCMS ink + round trip, pypdf
+#      output intent / DeviceCMYK, poppler render (cargo test veskra-io cmyk_interop; cmyk_check.py)
 #   4. SVG/PDF fixtures + rsvg/poppler/qpdf + pypdf + Inkscape (scripts/interop/svg_pdf_oracles.sh)
 #   5. QA scenarios S1-S8 + QAP-03 fault matrix (cargo test veskra-qa -> target/qa/*/result.json)
 #   6. pypdf + Inkscape on the scenario SVG/PDF exports (target/qa/S4..S6)
@@ -108,6 +110,14 @@ if py_has "import psd_tools, numpy, PIL"; then
     "$CT/interop/psd"
 else not_run psd_check_psd_tools "python3 psd_tools not installed"; fi
 
+# ---- 3b. CMYK (ADR-018) -----------------------------------------------------------------------
+step rust_cmyk_interop "veskra-io cmyk_interop (writes $CT/interop/cmyk, runs cmyk_check.py when psd-tools + pypdf present)" -- \
+  cargo test -p veskra-io --test cmyk_interop -- --nocapture
+if py_has "import psd_tools, pypdf, numpy, PIL"; then
+  step cmyk_check "scripts/interop/cmyk_check.py (psd-tools, LittleCMS, pypdf, poppler) on the CMYK exports" -- \
+    python3 -I scripts/interop/cmyk_check.py "$CT/interop/cmyk"
+else not_run cmyk_check "python3 psd_tools / pypdf not installed"; fi
+
 # ---- 4. SVG / PDF -----------------------------------------------------------------------------
 if have rsvg-convert && have pdftocairo && py_has "import pypdf"; then
   step svg_pdf_oracles "scripts/interop/svg_pdf_oracles.sh (rsvg, poppler, qpdf, pypdf, Inkscape)" -- \
@@ -151,6 +161,7 @@ if py_has "import PIL, numpy, colour"; then
   color_regen() {
     VESKRA_REGEN_COLOR_FIXTURES=1 cargo test -p veskra-color --test icc_fixtures || return 10
     python3 -I scripts/color/gen_oracle_fixtures.py || return 11
+    python3 -I scripts/color/gen_cmyk_oracle.py || return 13
     if diff -r "$BK" tests/fixtures/color; then
       echo "regenerated color fixtures are byte-identical to the committed ones"
     else
@@ -162,9 +173,12 @@ if py_has "import PIL, numpy, colour"; then
   step color_oracle_regen "ICC + LittleCMS/colour-science fixtures regenerate byte-identically" -- color_regen
   step color_oracle_test "cargo test -p veskra-color --test oracle (COL-002/003/008)" -- \
     cargo test -p veskra-color --test oracle -- --nocapture
+  step cmyk_oracle_test "cargo test -p veskra-color --test cmyk_oracle (ADR-018, LittleCMS CMYK oracle)" -- \
+    cargo test -p veskra-color --test cmyk_oracle -- --nocapture
 else
   not_run color_oracle_regen "Pillow/numpy/colour-science not installed"
   not_run color_oracle_test "Pillow/numpy/colour-science not installed"
+  not_run cmyk_oracle_test "Pillow/numpy/colour-science not installed"
 fi
 
 # ---- 9. summary ---------------------------------------------------------------------------------
