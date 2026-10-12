@@ -11,6 +11,37 @@ import java.io.File
 
 class ExportSheetStateTest {
     @Test
+    fun `cmyk is offered for psd and pdf only and carries the print settings`() {
+        var psd = ExportSheetState.initial(ExportDestination.PHOTOSHOP)
+        assertTrue(psd.cmykEnabled)
+        psd = psd.reduce(ExportSheetEvent.SetProfile(ExportProfile.CMYK))
+        assertTrue(psd.showsPrintSettings)
+        assertFalse(psd.embedProfileLocked, "untagged CMYK is allowed (with an engine warning)")
+        psd = psd.reduce(ExportSheetEvent.SetEmbedColorProfile(false))
+        assertFalse(psd.options.embedColorProfile)
+        psd = psd.reduce(ExportSheetEvent.SetCmykProfile("/data/profiles/printer.icc"))
+            .reduce(ExportSheetEvent.SetRenderingIntent(RenderingIntent.PERCEPTUAL))
+            .reduce(ExportSheetEvent.SetBlackPointCompensation(false))
+            .reduce(ExportSheetEvent.SetBitDepth(16))
+        assertEquals(null, psd.blockingMessage)
+        assertEquals(
+            """{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":false,"profile":"cmyk","bitDepth":16,""" +
+                """"cmykProfile":"/data/profiles/printer.icc","renderingIntent":"perceptual","blackPointCompensation":false}""",
+            psd.effectiveOptions.toJson().encode(),
+        )
+        assertEquals(psd.options, ExportOptions.fromJson(psd.options.toJson()))
+
+        // PNG / SVG cannot hold CMYK: the choice stays visible and the sheet says why it cannot export.
+        val png = ExportSheetState(ExportDestination.IMAGE, ExportFormat.PNG, psd.options)
+        assertFalse(png.cmykEnabled)
+        assertEquals(ExportCopy.CMYK_FORMAT_MESSAGE, png.blockingMessage)
+        assertFalse(png.canExport)
+        val pdf = ExportSheetState(ExportDestination.ILLUSTRATOR, ExportFormat.PDF, psd.options)
+        assertEquals(null, pdf.blockingMessage)
+        assertEquals(ExportCopy.CMYK_FORMAT_MESSAGE, pdf.reduce(ExportSheetEvent.SelectFormat(ExportFormat.SVG)).blockingMessage)
+    }
+
+    @Test
     fun `color space and bit depth options follow the format and keep the profile attached`() {
         var s = ExportSheetState.initial(ExportDestination.PHOTOSHOP)
         assertEquals(ExportProfile.DOCUMENT, s.options.profile)
@@ -31,7 +62,7 @@ class ExportSheetStateTest {
         assertEquals(16, s.effectiveOptions.bitDepth)
         assertEquals(s.options, s.reduce(ExportSheetEvent.SetBitDepth(12)).options, "only 8 and 16 exist")
         assertEquals(
-            """{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"srgb","bitDepth":16}""",
+            """{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"srgb","bitDepth":16,""" + """"cmykProfile":null,"renderingIntent":"relative_colorimetric","blackPointCompensation":true}""",
             s.effectiveOptions.toJson().encode(),
         )
 

@@ -161,6 +161,33 @@ class ProjectStore(context: Context) {
         }
     }
 
+    /** Imported printer (CMYK) profiles, kept app-private so exports can reference them by path. */
+    val profilesDir: File = File(context.filesDir, "profiles").apply { mkdirs() }
+
+    /**
+     * Copies an ICC profile picked through SAF into [profilesDir] under a sanitized name. The engine
+     * validates it afterwards (`profile.inspect`); the caller deletes the copy if it is unusable.
+     */
+    fun importProfile(uri: Uri): File {
+        val size = querySize(uri)
+        if (size != null && size > MAX_PROFILE_BYTES) throw IOException("profile too large")
+        val base = (displayName(uri) ?: "profile").substringBeforeLast('.')
+            .map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("").take(60).ifBlank { "profile" }
+        var dst = File(profilesDir, "$base.icc")
+        var n = 2
+        while (dst.exists()) dst = File(profilesDir, "$base-${n++}.icc")
+        StreamCopier.copyAndClose(
+            openInput = { resolver.openInputStream(uri) ?: throw IOException("provider returned no stream") },
+            openOutput = { dst.outputStream() },
+            expectedBytes = null,
+        )
+        if (dst.length() > MAX_PROFILE_BYTES) {
+            dst.delete()
+            throw IOException("profile too large")
+        }
+        return dst
+    }
+
     /** Writes [bitmap] (sRGB) as a PNG into the open-staging cache dir. Caller deletes the file. */
     fun stageBitmapAsPng(bitmap: Bitmap): File {
         val dst = File(openStagingDir, "import-${System.nanoTime()}.png")
@@ -181,6 +208,9 @@ class ProjectStore(context: Context) {
     companion object {
         /** Matches the engine's total bundle bound (veskra_core::limits::MAX_BUNDLE_TOTAL_BYTES). */
         const val MAX_OPEN_BYTES: Long = 4L * 1024 * 1024 * 1024
+
+        /** Matches the engine's limit for CMYK output profiles. */
+        const val MAX_PROFILE_BYTES: Long = 32L * 1024 * 1024
 
         /** Longest edge accepted for an imported image before power-of-two downsampling. */
         const val MAX_IMPORT_EDGE: Int = 8192

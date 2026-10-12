@@ -106,6 +106,9 @@ sealed interface ExportSheetEvent {
     data class SetEmbedColorProfile(val value: Boolean) : ExportSheetEvent
     data class SetProfile(val profile: ExportProfile) : ExportSheetEvent
     data class SetBitDepth(val bits: Int) : ExportSheetEvent
+    data class SetCmykProfile(val path: String?) : ExportSheetEvent
+    data class SetRenderingIntent(val intent: RenderingIntent) : ExportSheetEvent
+    data class SetBlackPointCompensation(val on: Boolean) : ExportSheetEvent
     data class PreflightStarted(val key: PreflightKey) : ExportSheetEvent
     data class PreflightLoaded(val key: PreflightKey, val info: ExportPreflightInfo) : ExportSheetEvent
     data class PreflightFailed(val key: PreflightKey, val error: EngineError) : ExportSheetEvent
@@ -144,6 +147,7 @@ data class ExportSheetState(
     /** Actionable reason export is blocked, or null. */
     val blockingMessage: String?
         get() = when {
+            options.profile == ExportProfile.CMYK && !format.supportsCmyk -> ExportCopy.CMYK_FORMAT_MESSAGE
             !isValid -> ExportCopy.BOTH_OFF_MESSAGE
             preflight is PreflightState.Ready && preflight.info.blockedReason != null -> preflight.info.blockedReason
             else -> null
@@ -154,6 +158,12 @@ data class ExportSheetState(
 
     /** 16-bit is offered only where the file format can carry it. */
     val bitDepthEnabled: Boolean get() = format.supports16Bit
+
+    /** CMYK is offered for PSD and PDF only. */
+    val cmykEnabled: Boolean get() = format.supportsCmyk
+
+    /** Print settings (profile, intent, black point) are shown while CMYK is chosen. */
+    val showsPrintSettings: Boolean get() = options.profile == ExportProfile.CMYK
 
     /**
      * Options sent to the engine: vector/raster flags are only meaningful for SVG/PDF, 16-bit only
@@ -214,6 +224,12 @@ data class ExportSheetState(
             } else {
                 this
             }
+        is ExportSheetEvent.SetCmykProfile ->
+            if (phase !is ExportPhase.Exporting) copy(options = options.copy(cmykProfile = e.path), phase = ExportPhase.Editing) else this
+        is ExportSheetEvent.SetRenderingIntent ->
+            if (phase !is ExportPhase.Exporting) copy(options = options.copy(renderingIntent = e.intent), phase = ExportPhase.Editing) else this
+        is ExportSheetEvent.SetBlackPointCompensation ->
+            if (phase !is ExportPhase.Exporting) copy(options = options.copy(blackPointCompensation = e.on), phase = ExportPhase.Editing) else this
         is ExportSheetEvent.SetBitDepth ->
             if (phase !is ExportPhase.Exporting && bitDepthEnabled && (e.bits == 8 || e.bits == 16)) {
                 copy(options = options.copy(bitDepth = e.bits), phase = ExportPhase.Editing)
@@ -256,12 +272,14 @@ object ExportCopy {
     const val COLOR_SPACE_LABEL: String = "Color space"
     const val BIT_DEPTH_LABEL: String = "Bit depth"
     const val GAMUT_NOTE: String = "Colors outside the chosen color space will be clipped to the nearest color it can hold."
+    const val CMYK_FORMAT_MESSAGE: String = "CMYK is available for PSD and PDF. Choose one of those formats, or another color space."
 
     fun profileLabel(p: ExportProfile): String = when (p) {
         ExportProfile.DOCUMENT -> "Same as canvas"
         ExportProfile.SRGB -> "sRGB"
         ExportProfile.DISPLAY_P3 -> "Display P3"
         ExportProfile.ADOBE_RGB -> "Adobe RGB (1998) compatible"
+        ExportProfile.CMYK -> "CMYK (print)"
     }
 
     fun bitDepthLabel(bits: Int): String = "$bits-bit"
@@ -299,13 +317,14 @@ object ExportCopy {
         add(profile(info.profile))
         if (info.bitDepth == 16) add(bitDepthLabel(16))
         if (info.gamutClippingPossible) add(GAMUT_NOTE)
+        info.totalAreaCoverageMax?.let { add("Max total ink: ${it.toInt()}%") }
         info.warnings.forEach { add(it.message) }
     }
 
     /** Every fixed user-facing string (for wording audits). */
     fun allFixedStrings(): List<String> = listOf(
         ILLUSTRATOR_TITLE, PHOTOSHOP_TITLE, IMAGE_TITLE, VECTOR_LABEL, RASTER_LABEL, PROFILE_LABEL,
-        BOTH_OFF_MESSAGE, NOT_VERIFIED_MESSAGE, ILLUSTRATOR_HINT, COLOR_SPACE_LABEL, BIT_DEPTH_LABEL, GAMUT_NOTE,
+        BOTH_OFF_MESSAGE, NOT_VERIFIED_MESSAGE, ILLUSTRATOR_HINT, COLOR_SPACE_LABEL, BIT_DEPTH_LABEL, GAMUT_NOTE, CMYK_FORMAT_MESSAGE,
     ) + ExportFormat.entries.map(::formatLabel) + ExportDestination.entries.map(::destinationTitle) +
         ExportProfile.entries.map(::profileLabel)
 }

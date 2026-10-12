@@ -32,6 +32,11 @@ class AppPreferences(context: Context) {
         get() = HexColor.parse(prefs.getString(KEY_PRIMARY_COLOR, null).orEmpty()) ?: HexColor.BLACK
         set(v) = prefs.edit { putString(KEY_PRIMARY_COLOR, v.toHex()) }
 
+    /** Imported CMYK output profile (app-private path); null = the bundled Coated FOGRA39. */
+    var printProfilePath: String?
+        get() = prefs.getString(KEY_PRINT_PROFILE, null)?.takeIf { java.io.File(it).isFile }
+        set(v) = prefs.edit { if (v == null) remove(KEY_PRINT_PROFILE) else putString(KEY_PRINT_PROFILE, v) }
+
     /** The second (background) color slot of the dock. */
     var secondaryColor: HexColor
         get() = HexColor.parse(prefs.getString(KEY_SECONDARY_COLOR, null).orEmpty()) ?: HexColor.WHITE
@@ -44,6 +49,7 @@ class AppPreferences(context: Context) {
 
     private companion object {
         const val KEY_PRIMARY_COLOR = "primary_color"
+        const val KEY_PRINT_PROFILE = "print_profile"
         const val KEY_SECONDARY_COLOR = "secondary_color"
         const val KEY_USER_PALETTE = "user_palette"
 

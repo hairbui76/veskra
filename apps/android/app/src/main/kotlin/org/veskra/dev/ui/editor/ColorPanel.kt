@@ -80,6 +80,7 @@ import org.veskra.kit.HexColor
 import org.veskra.kit.Hsb
 import org.veskra.kit.Lab
 import org.veskra.kit.Palette
+import org.veskra.kit.PrintColor
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
@@ -138,7 +139,7 @@ fun ColorPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
                         PaletteStrip(state, vm)
                     }
                     ColorTab.SLIDERS -> {
-                        SlidersTab(state.color, hsb, setHsb, vm)
+                        SlidersTab(state.color, hsb, setHsb, vm, state.printProfile?.description)
                         PaletteStrip(state, vm)
                     }
                     ColorTab.SWATCHES -> SwatchesTab(state, vm)
@@ -261,7 +262,7 @@ private class WheelGeometry(width: Float, height: Float) {
 // ---------------------------------------------------------------------------------------- sliders
 
 @Composable
-private fun SlidersTab(color: HexColor, hsb: Hsb, setHsb: (Hsb, Boolean) -> Unit, vm: VeskraViewModel) {
+private fun SlidersTab(color: HexColor, hsb: Hsb, setHsb: (Hsb, Boolean) -> Unit, vm: VeskraViewModel, printProfile: String?) {
     var model by rememberSaveable { mutableStateOf(SliderModel.HSB) }
     val apply: (HexColor, Boolean) -> Unit = { c, done -> if (done) vm.setColor(c) else vm.previewColor(c) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -291,22 +292,59 @@ private fun SlidersTab(color: HexColor, hsb: Hsb, setHsb: (Hsb, Boolean) -> Unit
             Channel("a", lab.a.roundToInt().toString(), (lab.a + 128f) / 255f, ramp { lab.copy(a = it * 255f - 128f) }) { f, d -> set(lab.copy(a = f * 255f - 128f), d) }
             Channel("b", lab.b.roundToInt().toString(), (lab.b + 128f) / 255f, ramp { lab.copy(b = it * 255f - 128f) }) { f, d -> set(lab.copy(b = f * 255f - 128f), d) }
         }
-        SliderModel.CMYK -> {
-            var cmyk by remember { mutableStateOf(ColorMath.toCmyk(color)) }
-            LaunchedEffect(color) { if (ColorMath.fromCmyk(cmyk) != color) cmyk = ColorMath.toCmyk(color) }
-            val set: (Cmyk, Boolean) -> Unit = { v, d -> cmyk = v; apply(ColorMath.fromCmyk(v), d) }
-            fun ends(f: (Float) -> Cmyk) = listOf(ColorMath.fromCmyk(f(0f)), ColorMath.fromCmyk(f(1f))).map { it.compose() }
-            Channel("C", pct(cmyk.c), cmyk.c, ends { cmyk.copy(c = it) }) { f, d -> set(cmyk.copy(c = f), d) }
-            Channel("M", pct(cmyk.m), cmyk.m, ends { cmyk.copy(m = it) }) { f, d -> set(cmyk.copy(m = f), d) }
-            Channel("Y", pct(cmyk.y), cmyk.y, ends { cmyk.copy(y = it) }) { f, d -> set(cmyk.copy(y = f), d) }
-            Channel("K", pct(cmyk.k), cmyk.k, ends { cmyk.copy(k = it) }) { f, d -> set(cmyk.copy(k = f), d) }
-            Text(stringResource(R.string.color_cmyk_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        SliderModel.CMYK -> PrintSliders(color, printProfile, vm)
     }
     HexField(color, onApply = vm::setColor)
 }
 
 private fun pct(v: Float): String = (v * 100f).roundToInt().toString()
+
+/**
+ * CMYK sliders measured through the print profile (the same one CMYK export uses), so the numbers
+ * are the inks the file will carry. The slider tracks use the naive formula only as a hint of
+ * direction; the swatch and the hex come from the profile.
+ */
+@Composable
+private fun PrintSliders(color: HexColor, profileName: String?, vm: VeskraViewModel) {
+    // Local values while dragging: a CMYK → sRGB → CMYK round trip would make the thumbs jump.
+    var cmyk by remember { mutableStateOf<Cmyk?>(null) }
+    var info by remember { mutableStateOf<PrintColor?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(color) {
+        if (dragging) return@LaunchedEffect
+        val p = vm.printColorOf(color)
+        info = p
+        cmyk = p?.cmyk ?: ColorMath.toCmyk(color)
+    }
+    val v = cmyk ?: return
+    val set: (Cmyk, Boolean) -> Unit = { next, done ->
+        dragging = !done
+        cmyk = next
+        vm.setColorFromCmyk(next, done)
+    }
+    fun ends(f: (Float) -> Cmyk) = listOf(ColorMath.fromCmyk(f(0f)), ColorMath.fromCmyk(f(1f))).map { it.compose() }
+    Channel("C", pct(v.c), v.c, ends { v.copy(c = it) }) { f, d -> set(v.copy(c = f), d) }
+    Channel("M", pct(v.m), v.m, ends { v.copy(m = it) }) { f, d -> set(v.copy(m = f), d) }
+    Channel("Y", pct(v.y), v.y, ends { v.copy(y = it) }) { f, d -> set(v.copy(y = f), d) }
+    Channel("K", pct(v.k), v.k, ends { v.copy(k = it) }) { f, d -> set(v.copy(k = f), d) }
+    val p = info
+    if (p != null && !p.inGamut) {
+        Text(
+            stringResource(R.string.color_cmyk_out_of_gamut),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    Text(
+        if (p != null) {
+            stringResource(R.string.color_cmyk_profile_note, profileName ?: p.profile, p.totalInkPercent.roundToInt())
+        } else {
+            stringResource(R.string.color_cmyk_note)
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
 
 private fun to8(f: Float): Int = (f * 255f).roundToInt().coerceIn(0, 255)
 

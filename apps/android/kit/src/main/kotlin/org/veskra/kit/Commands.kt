@@ -356,6 +356,45 @@ object Commands {
     /** Camera lock: the engine ignores pan / zoom / rotate gestures while drawing still works. */
     fun inputConfigLockView(locked: Boolean): JsonObject = json { "cmd" to "input.config"; "lockView" to locked }
 
+    // ----- print color (CMYK through an ICC output profile) -----
+
+    /** sRGB → CMYK through [cmykProfile] (null = bundled Coated FOGRA39); result `{cmyk:[c,m,y,k], inGamut, profile}`. */
+    fun colorToCmyk(
+        color: HexColor,
+        cmykProfile: String? = null,
+        intent: RenderingIntent = RenderingIntent.RELATIVE_COLORIMETRIC,
+        blackPointCompensation: Boolean = true,
+    ): JsonObject = json {
+        "cmd" to "color.convert"
+        "hex" to color.toHex()
+        "to" to "cmyk"
+        "cmykProfile" to cmykProfile
+        "intent" to intent.wire
+        "blackPointCompensation" to blackPointCompensation
+    }
+
+    /** CMYK (each 0..1) → sRGB through [cmykProfile]; result `{hex, clipped, profile}`. */
+    fun colorFromCmyk(
+        cmyk: Cmyk,
+        cmykProfile: String? = null,
+        intent: RenderingIntent = RenderingIntent.RELATIVE_COLORIMETRIC,
+        blackPointCompensation: Boolean = true,
+    ): JsonObject {
+        val v = listOf(cmyk.c, cmyk.m, cmyk.y, cmyk.k)
+        require(v.all { it.isFinite() && it in 0f..1f }) { "CMYK components must be in [0,1]" }
+        return json {
+            "cmd" to "color.convert"
+            "cmyk" to JsonArray(v.map { JsonNumber.of(it) })
+            "to" to "srgb"
+            "cmykProfile" to cmykProfile
+            "intent" to intent.wire
+            "blackPointCompensation" to blackPointCompensation
+        }
+    }
+
+    /** Reads an ICC file (null = the bundled CMYK profile) and says whether it can be used for CMYK export. */
+    fun profileInspect(path: String?): JsonObject = json { "cmd" to "profile.inspect"; "path" to path }
+
     /** Selection boundary as closed polylines + `bounds` (marching ants, transform box). */
     fun selectionOutline(maxPoints: Int = 4000): JsonObject = json { "cmd" to "selection.outline"; "maxPoints" to maxPoints }
 

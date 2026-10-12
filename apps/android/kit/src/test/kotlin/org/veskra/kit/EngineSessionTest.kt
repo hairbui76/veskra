@@ -64,7 +64,7 @@ class EngineSessionTest {
                 """{"cmd":"history.undo"}""",
                 """{"cmd":"brush.select","preset":"pencil.rough"}""",
                 """{"cmd":"color.set","hex":"#1A2B3C"}""",
-                """{"cmd":"export.preflight","format":"svg","options":{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"document","bitDepth":8}}""",
+                """{"cmd":"export.preflight","format":"svg","options":{"includeVectorPaths":true,"includeRasterAppearance":true,"embedColorProfile":true,"profile":"document","bitDepth":8,"cmykProfile":null,"renderingIntent":"relative_colorimetric","blackPointCompensation":true}}""",
                 """{"cmd":"document.save","path":"/app-private/tmp/x.veskra"}""",
                 """{"cmd":"layer.set","id":"L1","opacity":0.5,"blend":"multiply"}""",
             ),

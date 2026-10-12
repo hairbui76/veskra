@@ -27,6 +27,9 @@ import org.veskra.dev.storage.ProjectEntry
 import org.veskra.dev.storage.ProjectStore
 import org.veskra.dev.storage.RecoveryEntry
 import org.veskra.kit.Affine
+import org.veskra.kit.Cmyk
+import org.veskra.kit.PrintColor
+import org.veskra.kit.ProfileInfo
 import org.veskra.kit.BlendMode
 import org.veskra.kit.BrushPreset
 import org.veskra.kit.CanvasSpec
@@ -210,6 +213,9 @@ data class UiState(
     /** Camera lock: two-finger pan / zoom / rotate is ignored. */
     val viewLocked: Boolean = false,
     val resizeDialog: Boolean = false,
+    /** The CMYK output profile used for print export and the picker's CMYK values. */
+    val printProfile: ProfileInfo? = null,
+    val printProfilePath: String? = null,
     /** The "Add text" dialog is open. */
     val textDialog: Boolean = false,
     val saveStatus: SaveStatus = SaveStatus.NeverSaved(false),
@@ -251,6 +257,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
             color = prefs.primaryColor,
             secondaryColor = prefs.secondaryColor,
             userPalette = prefs.userPalette,
+            printProfilePath = prefs.printProfilePath,
         ),
     )
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -265,6 +272,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
         display.historyListener = { committed -> onHistoryChanged(committed) }
         display.viewListener = { v -> _view.value = v }
         refreshGallery()
+        refreshPrintProfile()
     }
 
     override fun onCleared() {
@@ -1205,8 +1213,74 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------------------------------------------------------- export (MASTER_PLAN §2.3)
 
     fun openExport(destination: ExportDestination = ExportDestination.ILLUSTRATOR) {
-        _ui.update { it.copy(sheet = EditorSheet.EXPORT, export = ExportSheetState.initial(destination, prefs.exportPreferences)) }
+        // The print profile is one app-wide setting, so it wins over what a destination remembered.
+        val sheet = ExportSheetState.initial(destination, prefs.exportPreferences)
+            .reduce(ExportSheetEvent.SetCmykProfile(prefs.printProfilePath))
+        _ui.update { it.copy(sheet = EditorSheet.EXPORT, export = sheet) }
         maybePreflight()
+    }
+
+    // ---------------------------------------------------------------- print color (CMYK)
+
+    private fun refreshPrintProfile() {
+        viewModelScope.launch {
+            val path = prefs.printProfilePath
+            val info = query(Commands.profileInspect(path))?.let(ProfileInfo::fromJson)
+            _ui.update { it.copy(printProfile = info, printProfilePath = path) }
+        }
+    }
+
+    private fun setPrintProfile(path: String?) {
+        prefs.printProfilePath = path
+        _ui.update { st -> st.copy(printProfilePath = path, export = st.export?.reduce(ExportSheetEvent.SetCmykProfile(path))) }
+        refreshPrintProfile()
+        maybePreflight()
+    }
+
+    fun useBundledPrintProfile() = setPrintProfile(null)
+
+    /** SAF: the printer's own .icc profile. Unusable files are removed again with the engine's reason. */
+    fun importPrintProfile(uri: Uri) {
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                try {
+                    store.importProfile(uri)
+                } catch (e: IOException) {
+                    null
+                }
+            }
+            if (file == null) {
+                show(R.string.print_profile_import_failed, "")
+                return@launch
+            }
+            val result = onEngine { s -> s.execute(Commands.profileInspect(file.absolutePath)) }
+            val info = ((result as? EngineResult.Ok)?.value as? JsonObject)?.let(ProfileInfo::fromJson)
+            if (info == null || !info.usableForCmykExport) {
+                withContext(Dispatchers.IO) { file.delete() }
+                val reason = info?.reason ?: (result as? EngineResult.Err)?.error?.message ?: ""
+                show(R.string.print_profile_import_failed, reason)
+                return@launch
+            }
+            setPrintProfile(file.absolutePath)
+        }
+    }
+
+    /** The current color as printed through the print profile; null if the engine cannot say. */
+    suspend fun printColorOf(c: HexColor): PrintColor? =
+        query(Commands.colorToCmyk(c, prefs.printProfilePath))?.let(PrintColor::fromJson)
+
+    private var cmykJob: Job? = null
+
+    /**
+     * CMYK sliders: ink amounts → the sRGB color they print as. While dragging only the newest
+     * request matters, so a pending one is cancelled; [done] makes the engine's color follow.
+     */
+    fun setColorFromCmyk(cmyk: Cmyk, done: Boolean) {
+        cmykJob?.cancel()
+        cmykJob = viewModelScope.launch {
+            val hex = query(Commands.colorFromCmyk(cmyk, prefs.printProfilePath))?.string("hex")?.let(HexColor::parse) ?: return@launch
+            if (done) setColor(hex) else previewColor(hex)
+        }
     }
 
     fun onExportEvent(e: ExportSheetEvent) {

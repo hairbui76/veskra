@@ -48,6 +48,8 @@ import org.veskra.kit.ExportPhase
 import org.veskra.kit.ExportSheetEvent
 import org.veskra.kit.ExportSheetState
 import org.veskra.kit.PreflightState
+import org.veskra.kit.RenderingIntent
+import kotlin.math.roundToInt
 
 @StringRes
 private fun destinationTitle(d: ExportDestination): Int = when (d) {
@@ -132,16 +134,26 @@ fun ExportSheet(export: ExportSheetState, state: UiState, vm: VeskraViewModel) {
                 ExportProfile.entries.forEach { p ->
                     FilterChip(
                         selected = export.options.profile == p,
-                        enabled = !exporting,
+                        enabled = !exporting && (p != ExportProfile.CMYK || export.cmykEnabled),
                         onClick = { vm.onExportEvent(ExportSheetEvent.SetProfile(p)) },
                         label = { Text(stringResource(profileLabel(p))) },
                     )
                 }
             }
             Text(
-                stringResource(if (export.options.profile == ExportProfile.DOCUMENT) R.string.export_color_space_keep else R.string.export_color_space_convert),
+                stringResource(
+                    when {
+                        export.options.profile == ExportProfile.DOCUMENT -> R.string.export_color_space_keep
+                        export.options.profile == ExportProfile.CMYK -> R.string.export_cmyk_help
+                        else -> R.string.export_color_space_convert
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (!export.cmykEnabled) {
+                Text(stringResource(R.string.export_cmyk_formats), style = MaterialTheme.typography.bodySmall)
+            }
+            if (export.showsPrintSettings) PrintSettings(export, state, vm, enabled = !exporting)
             if (export.bitDepthEnabled) {
                 Text(stringResource(R.string.export_bit_depth), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -158,7 +170,13 @@ fun ExportSheet(export: ExportSheetState, state: UiState, vm: VeskraViewModel) {
             }
             OptionRow(
                 label = stringResource(R.string.export_opt_profile),
-                help = stringResource(if (export.embedProfileLocked) R.string.export_opt_profile_locked else R.string.export_opt_profile_help),
+                help = stringResource(
+                    when {
+                        export.embedProfileLocked -> R.string.export_opt_profile_locked
+                        export.options.profile == ExportProfile.CMYK -> R.string.export_opt_profile_cmyk
+                        else -> R.string.export_opt_profile_help
+                    },
+                ),
                 checked = export.options.embedColorProfile,
                 enabled = !exporting && !export.embedProfileLocked,
             ) { vm.onExportEvent(ExportSheetEvent.SetEmbedColorProfile(it)) }
@@ -172,7 +190,11 @@ fun ExportSheet(export: ExportSheetState, state: UiState, vm: VeskraViewModel) {
 
             // Actionable blocking message (both-off, or engine-blocked).
             export.blockingMessage?.let { msg ->
-                val text = if (msg == ExportCopy.BOTH_OFF_MESSAGE) stringResource(R.string.export_both_off) else msg
+                val text = when (msg) {
+                    ExportCopy.BOTH_OFF_MESSAGE -> stringResource(R.string.export_both_off)
+                    ExportCopy.CMYK_FORMAT_MESSAGE -> stringResource(R.string.export_cmyk_formats)
+                    else -> msg
+                }
                 Text(
                     text,
                     color = MaterialTheme.colorScheme.error,
@@ -222,12 +244,67 @@ private fun OptionRow(label: String, help: String, checked: Boolean, enabled: Bo
     }
 }
 
+/** CMYK output: which printer profile, how out-of-gamut colors are handled, black point. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PrintSettings(export: ExportSheetState, state: UiState, vm: VeskraViewModel, enabled: Boolean) {
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importPrintProfile(uri) }
+    val info = state.printProfile
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.export_print_profile), style = MaterialTheme.typography.labelLarge)
+        Text(
+            when {
+                info == null -> stringResource(R.string.export_print_profile_loading)
+                info.bundled -> stringResource(R.string.export_print_profile_bundled, info.description)
+                else -> info.description
+            },
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { pick.launch(arrayOf("application/vnd.iccprofile", "application/octet-stream", "*/*")) }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.export_print_profile_import))
+            }
+            if (info != null && !info.bundled) {
+                TextButton(onClick = vm::useBundledPrintProfile, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.export_print_profile_default))
+                }
+            }
+        }
+        Text(stringResource(R.string.export_rendering_intent), style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = export.options.renderingIntent == RenderingIntent.RELATIVE_COLORIMETRIC,
+                enabled = enabled,
+                onClick = { vm.onExportEvent(ExportSheetEvent.SetRenderingIntent(RenderingIntent.RELATIVE_COLORIMETRIC)) },
+                label = { Text(stringResource(R.string.export_intent_relative)) },
+            )
+            FilterChip(
+                selected = export.options.renderingIntent == RenderingIntent.PERCEPTUAL,
+                enabled = enabled,
+                onClick = { vm.onExportEvent(ExportSheetEvent.SetRenderingIntent(RenderingIntent.PERCEPTUAL)) },
+                label = { Text(stringResource(R.string.export_intent_perceptual)) },
+            )
+        }
+        Text(
+            stringResource(if (export.options.renderingIntent == RenderingIntent.PERCEPTUAL) R.string.export_intent_perceptual_help else R.string.export_intent_relative_help),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OptionRow(
+            label = stringResource(R.string.export_bpc),
+            help = stringResource(R.string.export_bpc_help),
+            checked = export.options.blackPointCompensation,
+            enabled = enabled,
+        ) { vm.onExportEvent(ExportSheetEvent.SetBlackPointCompensation(it)) }
+    }
+}
+
 @StringRes
 private fun profileLabel(p: ExportProfile): Int = when (p) {
     ExportProfile.DOCUMENT -> R.string.export_profile_document
     ExportProfile.SRGB -> R.string.export_profile_srgb
     ExportProfile.DISPLAY_P3 -> R.string.export_profile_display_p3
     ExportProfile.ADOBE_RGB -> R.string.export_profile_adobe_rgb
+    ExportProfile.CMYK -> R.string.export_profile_cmyk
 }
 
 /** Counts before export (MASTER_PLAN §2.3); same rules as ExportCopy.summaryLines, localized. */
@@ -253,6 +330,7 @@ private fun PreflightSummary(export: ExportSheetState) {
                 Text(stringResource(R.string.export_profile_line, info.profile))
                 if (info.bitDepth == 16) Text(stringResource(R.string.export_bit_depth_value, 16))
                 if (info.gamutClippingPossible) Text(stringResource(R.string.export_gamut_note))
+                info.totalAreaCoverageMax?.let { Text(stringResource(R.string.export_total_ink, it.roundToInt())) }
                 info.warnings.forEach { w -> Text("• ${w.message}", style = MaterialTheme.typography.bodySmall) }
             }
         }
