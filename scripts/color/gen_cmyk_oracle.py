@@ -336,8 +336,9 @@ def main() -> int:
     p = cmyk.profile
     doc = {
         "generator": "scripts/color/gen_cmyk_oracle.py",
-        "tools": {"python": platform.python_version(), "pillow": PIL.__version__,
-                  "littlecms": ImageCms.core.littlecms_version},
+        # The Python version is printed but not recorded: the numbers depend only on Pillow /
+        # LittleCMS, so regenerating with the pinned Pillow is byte-identical on any Python.
+        "tools": {"pillow": PIL.__version__, "littlecms": ImageCms.core.littlecms_version},
         "notes": "All LittleCMS buffers are 8-bit (Pillow): CMYK 0..255 = 0..100 % ink (not inverted); "
                  "Lab decoded from 8-bit as L = v*100/255, a/b = v-128 (quantisation: 0.39 L*, 1 a*/b*).",
         "source_profile": {"file": str(SRGB.relative_to(FIX)).replace("\\", "/"),
@@ -365,7 +366,7 @@ def main() -> int:
         "synthetic_v4": synth_doc,
     }
     OUT.write_text(dump_json(doc), encoding="utf-8", newline="\n")
-    print(f"tools: {doc['tools']}")
+    print(f"tools: {doc['tools']} (python {platform.python_version()})")
     print(f"swatches: {len(sw)}; rgb->cmyk sets: {len(rgb_to_cmyk)}; cmyk grid: {len(grid)}")
     print(f"synthetic v4 profile: {len(synth_bytes)} bytes, lcms description {synth_doc['lcms_description']!r}")
     return 0
