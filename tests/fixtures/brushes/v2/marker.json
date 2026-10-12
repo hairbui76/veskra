@@ -1,0 +1,49 @@
+{
+  "schema": 2,
+  "id": "marker",
+  "version": 1,
+  "name": "Marker",
+  "kind": "marker",
+  "size_px": 16.0,
+  "min_size_ratio": 0.8,
+  "opacity": 0.7,
+  "flow": 1.0,
+  "spacing": 0.06,
+  "hardness": 0.9,
+  "pressure_size": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_opacity": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_flow": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "tilt_size": null,
+  "grain": null,
+  "accumulation": "max",
+  "eraser": false,
+  "vector_eligible": true,
+  "stabilization": 0.0
+}

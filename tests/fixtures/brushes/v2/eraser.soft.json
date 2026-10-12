@@ -1,0 +1,49 @@
+{
+  "schema": 2,
+  "id": "eraser.soft",
+  "version": 1,
+  "name": "Soft eraser",
+  "kind": "eraser",
+  "size_px": 40.0,
+  "min_size_ratio": 1.0,
+  "opacity": 1.0,
+  "flow": 0.15,
+  "spacing": 0.1,
+  "hardness": 0.0,
+  "pressure_size": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_opacity": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "pressure_flow": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0
+    ]
+  ],
+  "tilt_size": null,
+  "grain": null,
+  "accumulation": "build_up",
+  "eraser": true,
+  "vector_eligible": false,
+  "stabilization": 0.0
+}

@@ -672,6 +672,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "sha2",
  "veskra-core",
 ]
 
