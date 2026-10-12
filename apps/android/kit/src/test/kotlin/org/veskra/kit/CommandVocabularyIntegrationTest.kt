@@ -177,6 +177,46 @@ class CommandVocabularyIntegrationTest {
     }
 
     @Test
+    fun `cmyk print builders are understood by the engine`() {
+        val h = NativeBridge.nativeCreateSession()
+        val dir = Files.createTempDirectory("veskra-vocab-cmyk").toFile()
+        try {
+            exec(h, Commands.documentCreate(256, 192, 300, "#FFFFFF"))
+            exec(h, Commands.colorSet(HexColor(0x00FF00)))
+            exec(h, Commands.shapeEllipse(20f, 20f, 200f, 160f, fill = true))
+
+            val bundled = ProfileInfo.fromJson(exec(h, Commands.profileInspect(null)) as JsonObject)!!
+            assertTrue(bundled.bundled && bundled.usableForCmykExport, bundled.toString())
+            assertEquals("CMYK", bundled.colorSpace)
+
+            // Pure sRGB green is outside offset-press gamut; mid grey is printable.
+            val green = PrintColor.fromJson(exec(h, Commands.colorToCmyk(HexColor(0x00FF00))) as JsonObject)!!
+            assertTrue(!green.inGamut, green.toString())
+            assertTrue(green.totalInkPercent <= 300.5f, "FOGRA39 300% ink limit: $green")
+            val grey = PrintColor.fromJson(exec(h, Commands.colorToCmyk(HexColor(0x808080))) as JsonObject)!!
+            assertTrue(grey.inGamut, grey.toString())
+            val back = (exec(h, Commands.colorFromCmyk(grey.cmyk)) as JsonObject).string("hex")!!
+            assertTrue(ColorMath.near(HexColor.parse(back)!!, HexColor(0x808080), tolerance = 4), back)
+
+            for (format in listOf(ExportFormat.PSD, ExportFormat.PDF)) {
+                val options = ExportOptions(profile = ExportProfile.CMYK, bitDepth = if (format == ExportFormat.PSD) 16 else 8)
+                val pf = ExportPreflightInfo.fromJson(exec(h, Commands.exportPreflight(format, options)) as JsonObject)!!
+                assertEquals(null, pf.blockedReason)
+                assertTrue((pf.totalAreaCoverageMax ?: 0.0) > 0.0, pf.toString())
+                val out = File(dir, "cmyk.${format.extension}")
+                val report = ExportReportInfo.fromJson(exec(h, Commands.exportRun(format, out.absolutePath, options)) as JsonObject)!!
+                assertTrue(report.isTrustworthySuccess, report.toString())
+                assertTrue(report.outOfGamutPixels > 0, "the green ellipse cannot be printed exactly")
+            }
+            val png = ExportPreflightInfo.fromJson(exec(h, Commands.exportPreflight(ExportFormat.PNG, ExportOptions(profile = ExportProfile.CMYK))) as JsonObject)!!
+            assertTrue(png.blockedReason != null, "PNG cannot hold CMYK")
+        } finally {
+            NativeBridge.nativeDestroySession(h)
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `raster edit, canvas and export color builders are understood by the engine`() {
         val h = NativeBridge.nativeCreateSession()
         val dir = Files.createTempDirectory("veskra-vocab-raster").toFile()
