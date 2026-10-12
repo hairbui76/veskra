@@ -31,7 +31,8 @@
 //! pixels and therefore has no vector form (see its module docs).
 //!
 //! Brush assets ([`asset`]) are content-hashed grayscale masks; the built-in ones are generated
-//! procedurally ([`builtin_assets`]).
+//! procedurally ([`builtin_assets`]). [`interop::infinite_painter`] maps Infinite Painter
+//! `.prbr` properties onto schema-3 presets (approximations are reported, never hidden).
 
 pub mod asset;
 mod builtin;
@@ -40,6 +41,7 @@ mod curve;
 mod dab;
 mod error;
 mod geometry;
+pub mod interop;
 mod noise;
 mod path;
 pub mod preset;

@@ -1,0 +1,236 @@
+{
+	"blend-properties" : 
+	{
+		"dirty-blending" : false,
+		"flow" : 0.5,
+		"mix-in" : 0,
+		"mix-in dilution" : 0,
+		"mix-wet" : false,
+		"smudge" : 0.5,
+		"strength" : 0.5
+	},
+	"display-name" : "Manga Inker",
+	"dynamics-properties" : 
+	{
+		"pressure - effects flow" : true,
+		"pressure - effects scatter" : false,
+		"pressure - effects size" : true,
+		"pressure - effects texture" : true,
+		"pressure profile - flow" : 
+		[
+			0,
+			1,
+			0.18918919563293457,
+			0.09375,
+			1,
+			0
+		],
+		"pressure profile - scatter" : 
+		[
+			0,
+			1,
+			0.5,
+			0.89999997615814209,
+			1,
+			0.60000002384185791
+		],
+		"pressure profile - size" : 
+		[
+			0,
+			0.9609375,
+			0.33614864945411682,
+			0.580078125,
+			0.68581080436706543,
+			0.0703125,
+			1,
+			0
+		],
+		"pressure profile - texture" : 
+		[
+			0,
+			0.5,
+			0.5,
+			0.30000001192092896,
+			1,
+			0
+		],
+		"tilt - effects flow" : false,
+		"tilt - effects scatter" : false,
+		"tilt - effects size" : false,
+		"tilt - effects texture" : true,
+		"tilt - offset" : 0.80000001192092896,
+		"tilt profile - flow" : 
+		[
+			0,
+			0,
+			0.5,
+			0,
+			1,
+			0.75
+		],
+		"tilt profile - scatter" : 
+		[
+			0,
+			1,
+			0.5,
+			1,
+			1,
+			0.39999997615814209
+		],
+		"tilt profile - size" : 
+		[
+			0,
+			1,
+			0.5,
+			1,
+			1,
+			0.6484375
+		],
+		"tilt profile - texture" : 
+		[
+			0,
+			0,
+			0.60135132074356079,
+			0,
+			1,
+			0
+		],
+		"velocity - effects flow" : false,
+		"velocity - effects scatter" : false,
+		"velocity - effects size" : false,
+		"velocity - effects texture" : false,
+		"velocity profile - flow" : 
+		[
+			0,
+			0,
+			0.5,
+			0.5,
+			1,
+			1
+		],
+		"velocity profile - scatter" : 
+		[
+			0,
+			0,
+			0.5,
+			0.19999998807907104,
+			1,
+			0.39999997615814209
+		],
+		"velocity profile - size" : 
+		[
+			0,
+			0,
+			0.51351350545883179,
+			0.212890625,
+			1,
+			0.701171875
+		],
+		"velocity profile - texture" : 
+		[
+			0,
+			1,
+			0.5,
+			0.5,
+			1,
+			0
+		]
+	},
+	"head-properties" : 
+	{
+		"angle" : 0,
+		"flow" : 1,
+		"rotation" : 0,
+		"softness" : 0,
+		"spacing" : 0.10389019548892975,
+		"structure" : 0,
+		"style" : 1,
+		"use-trajectory" : false
+	},
+	"jitter-properties" : 
+	{
+		"angle" : 0,
+		"color-brightness" : 0,
+		"color-hue" : 0,
+		"color-saturation" : 0,
+		"flow" : 0,
+		"scatter" : 0,
+		"size" : 0,
+		"texture-position" : 0,
+		"texture-scale" : 0
+	},
+	"parent" : 310,
+	"source-properties" : 
+	{
+		"custom-head" : "",
+		"custom-stroke texture" : "",
+		"head" : "",
+		"head - color" : false,
+		"head - conversion format" : 1,
+		"head - profile" : 
+		[
+			0,
+			1,
+			1,
+			0
+		],
+		"stroke texture" : "",
+		"stroke texture - color" : false,
+		"stroke texture - profile" : 
+		[
+			0,
+			1,
+			1,
+			0
+		]
+	},
+	"stroke-properties" : 
+	{
+		"adhesion" : 0,
+		"blend-opacity" : 1,
+		"blend-size" : 85.809272766113281,
+		"blendmode" : 0,
+		"blendmode-intensity" : 1,
+		"erase-opacity" : 1,
+		"erase-size" : 16.25,
+		"flow-profile" : 
+		[
+			0.011824321001768112,
+			1,
+			0.011824321001768112,
+			0,
+			0.98817569017410278,
+			0,
+			0.98817569017410278,
+			1
+		],
+		"has-flow-profile" : false,
+		"has-size-profile" : false,
+		"lazy-stroke" : 0.20333334803581238,
+		"paint-opacity" : 1,
+		"paint-size" : 85.809272766113281,
+		"size-maximum" : 0.24692288041114807,
+		"size-profile" : 
+		[
+			0,
+			0.671875,
+			0.14527027308940887,
+			0,
+			0.83445942401885986,
+			0,
+			1,
+			0.6796875
+		]
+	},
+	"texture-properties" : 
+	{
+		"invert" : false,
+		"pressure" : 0.8069232702255249,
+		"scale" : 0.50115394592285156,
+		"scale-size" : false,
+		"softness" : 0,
+		"stretch" : 1,
+		"structure" : 0,
+		"style" : 1
+	}
+}
