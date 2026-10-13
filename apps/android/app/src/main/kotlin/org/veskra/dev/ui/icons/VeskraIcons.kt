@@ -310,6 +310,14 @@ object VeskraIcons {
     val Swap: ImageVector by lazy {
         icon("swap") { moveTo(7f, 4f); lineTo(4f, 7f); lineTo(7f, 10f); moveTo(4f, 7f); lineTo(16f, 7f); moveTo(17f, 14f); lineTo(20f, 17f); lineTo(17f, 20f); moveTo(20f, 17f); lineTo(8f, 17f) }
     }
+    val Letter: ImageVector by lazy {
+        // Envelope with a small heart seal.
+        icon("letter") {
+            moveTo(3f, 6f); lineTo(21f, 6f); lineTo(21f, 18f); lineTo(3f, 18f); close()
+            moveTo(3f, 6f); lineTo(12f, 13f); lineTo(21f, 6f)
+            moveTo(12f, 16.5f); curveTo(9.5f, 14.8f, 10.2f, 12.6f, 12f, 13.8f); curveTo(13.8f, 12.6f, 14.5f, 14.8f, 12f, 16.5f); close()
+        }
+    }
     val Recover: ImageVector by lazy {
         icon("recover") {
             moveTo(20f, 12f); curveTo(20f, 16.4f, 16.4f, 20f, 12f, 20f); curveTo(7.6f, 20f, 4f, 16.4f, 4f, 12f)

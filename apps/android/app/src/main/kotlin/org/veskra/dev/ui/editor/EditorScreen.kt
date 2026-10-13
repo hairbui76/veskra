@@ -40,6 +40,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -217,6 +221,8 @@ fun SaveStatusIndicator(status: SaveStatus, onRetry: () -> Unit) {
 @Composable
 private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
     var open by remember { mutableStateOf(false) }
+    var letter by remember { mutableStateOf(false) }
+    if (letter) LetterDialog(onDismiss = { letter = false })
     Box {
         ChromeButton(VeskraIcons.More, stringResource(R.string.tool_more), selected = open) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -231,12 +237,37 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
                 onClick = { open = false; vm.openExport() },
             )
             DropdownMenuItem(
+                text = { Text(stringResource(R.string.letter_menu)) },
+                leadingIcon = { Icon(VeskraIcons.Letter, contentDescription = null) },
+                onClick = { open = false; letter = true },
+            )
+            DropdownMenuItem(
                 text = { Text(stringResource(R.string.tool_switch_side)) },
                 leadingIcon = { Icon(VeskraIcons.SwapSide, contentDescription = null) },
                 onClick = { open = false; vm.toggleRailSide() },
             )
         }
     }
+}
+
+/** The letter this app was made to carry. */
+@Composable
+private fun LetterDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(VeskraIcons.Letter, contentDescription = null, tint = Color(0xFFF07882)) },
+        title = { Text(stringResource(R.string.letter_title)) },
+        text = {
+            Text(
+                stringResource(R.string.letter_body),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.letter_close)) }
+        },
+    )
 }
 
 /**
