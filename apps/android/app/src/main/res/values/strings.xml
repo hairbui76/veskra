@@ -75,8 +75,8 @@
     <string name="tool_tools">Tools</string>
     <string name="tool_more">More</string>
     <!-- A personal letter from the author; intentionally Vietnamese only. -->
-    <string name="letter_menu" translatable="false">Thư</string>
-    <string name="letter_title" translatable="false">💌 Một lá thư</string>
+    <string name="letter_menu" translatable="false">MP</string>
+    <string name="letter_title" translatable="false">Just a letter...</string>
     <string name="letter_body" translatable="false">Tặng Minh Phương. Em đừng thức khuya quá nhìu, cần gì thì nói với tui. Chúc con đường em đi thuận buồm xuôi gió, lúc nào cũng có cầu vồng kế bên, chúc cho những cơn mưa luôn là những dòng nước mát làm em dễ chịu. Còn nếu có gì khó, gọi anh.</string>
     <string name="letter_close" translatable="false">Đã đọc ♥</string>
     <string name="tool_brush_smoothing">Smoothing</string>

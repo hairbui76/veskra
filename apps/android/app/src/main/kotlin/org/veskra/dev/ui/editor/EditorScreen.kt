@@ -43,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -237,14 +236,14 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
                 onClick = { open = false; vm.openExport() },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.letter_menu)) },
-                leadingIcon = { Icon(VeskraIcons.Letter, contentDescription = null) },
-                onClick = { open = false; letter = true },
-            )
-            DropdownMenuItem(
                 text = { Text(stringResource(R.string.tool_switch_side)) },
                 leadingIcon = { Icon(VeskraIcons.SwapSide, contentDescription = null) },
                 onClick = { open = false; vm.toggleRailSide() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.letter_menu)) },
+                leadingIcon = { Icon(VeskraIcons.Letter, contentDescription = null) },
+                onClick = { open = false; letter = true },
             )
         }
     }
@@ -255,7 +254,6 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
 private fun LetterDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(VeskraIcons.Letter, contentDescription = null, tint = Color(0xFFF07882)) },
         title = { Text(stringResource(R.string.letter_title)) },
         text = {
             Text(
