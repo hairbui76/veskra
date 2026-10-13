@@ -1,10 +1,12 @@
-//! Built-in presets (ADR-004, ADR-019): 30 original presets in display order, and the
-//! procedurally generated assets some of them use ([`builtin_assets`]).
+//! Built-in presets (ADR-004, ADR-019 and its amendment 1): 70 original presets in display
+//! order, and the procedurally generated assets some of them use ([`builtin_assets`]).
 //!
 //! The ten pre-v2 ids ([`LEGACY_BUILTIN_IDS`]) keep their exact parameters (they equal the
 //! migrated schema-2 JSON, so existing documents re-render byte-identically). `pen.brush`'s
 //! pressure curve is spelled out as literals (the values the old `powf(1.6)` produced) so the
-//! preset no longer depends on the platform libm. No third-party brush assets are used.
+//! preset no longer depends on the platform libm. The second wave of 40 brushes lives in
+//! [`wave2`]; it changes none of the first 30 presets or their eight assets. No third-party brush
+//! assets are used.
 
 use std::sync::OnceLock;
 
@@ -13,10 +15,89 @@ use crate::preset::{
     Accumulation, BrushCategory, BrushPreset, BrushSource, Dynamics, DynamicsSource, DynamicsTarget, Jitter, Texture,
     TextureMode, TextureSource, Tip, TipRotation, TipShape,
 };
+use crate::procedural::wave2 as p2;
 use crate::{ResponseCurve, procedural};
 
-/// Stable ids of the built-in presets, in display order.
-pub const BUILTIN_IDS: [&str; 30] = [
+mod wave2;
+
+/// Stable ids of the built-in presets, in display order (grouped by family; the first wave's
+/// relative order is unchanged and the erasers stay last).
+pub const BUILTIN_IDS: [&str; 70] = [
+    "pencil.hb",
+    "pencil.2b",
+    "pencil.mechanical",
+    "pencil.smooth",
+    "pencil.rough",
+    "pencil.colored",
+    "pencil.charcoal",
+    "pencil.graphite_stick",
+    "ink.gpen",
+    "pen.technical",
+    "ink.fineliner",
+    "pen.brush",
+    "ink.dry",
+    "ink.ballpoint",
+    "calligraphy.dip_pen",
+    "calligraphy.brush_marker",
+    "calligraphy.flat_nib",
+    "calligraphy.sumi",
+    "marker.felt",
+    "marker",
+    "marker.alcohol",
+    "marker.highlighter",
+    "round.hard",
+    "paint.round_bristle",
+    "paint.flat_oil",
+    "paint.gouache",
+    "paint.knife",
+    "paint.impasto",
+    "paint.fan",
+    "watercolor.round",
+    "watercolor.wet_wash",
+    "watercolor.granulating",
+    "watercolor.dry_brush",
+    "watercolor.bleed",
+    "watercolor.salt",
+    "airbrush.soft",
+    "round.soft",
+    "airbrush.spray",
+    "airbrush.grainy",
+    "charcoal",
+    "texture.chalk",
+    "texture.pastel",
+    "texture.crayon",
+    "texture.sponge",
+    "texture.conte",
+    "nature.grass",
+    "nature.foliage",
+    "nature.leaves",
+    "nature.flowers",
+    "nature.twigs",
+    "nature.fur",
+    "nature.hair",
+    "effect.glitter",
+    "effect.sparkle",
+    "effect.bokeh",
+    "effect.glow",
+    "effect.light_rays",
+    "effect.fog",
+    "effect.rain",
+    "effect.snow",
+    "effect.splatter",
+    "pattern.halftone",
+    "pattern.stipple",
+    "pattern.crosshatch",
+    "pattern.scales",
+    "pattern.honeycomb",
+    "pattern.clouds",
+    "eraser.hard",
+    "eraser.soft",
+    "eraser.textured",
+];
+
+/// Ids of the first wave (the 30 built-ins of ADR-019 before amendment 1). Their parameters and
+/// renders are frozen (goldens in `tests/fixtures/goldens/brush_<id>.png`).
+pub const FIRST_WAVE_IDS: [&str; 30] = [
     "pencil.hb",
     "pencil.2b",
     "pencil.mechanical",
@@ -63,9 +144,91 @@ pub const LEGACY_BUILTIN_IDS: [&str; 10] = [
     "eraser.soft",
 ];
 
-/// Names of the built-in procedural assets (see [`crate::procedural`]).
-pub const BUILTIN_ASSET_NAMES: [&str; 8] =
-    ["bristle_round", "bristle_flat", "dry", "speckle", "chalk", "sponge", "paper", "canvas"];
+/// Names of the built-in procedural assets (see [`crate::procedural`]): the first wave's eight,
+/// then the second wave's (tips first, then tileable textures).
+pub const BUILTIN_ASSET_NAMES: [&str; 37] = [
+    "bristle_round",
+    "bristle_flat",
+    "dry",
+    "speckle",
+    "chalk",
+    "sponge",
+    "paper",
+    "canvas",
+    "sumi",
+    "dry_bristle",
+    "bloom",
+    "grass",
+    "leaf",
+    "fur",
+    "hair",
+    "twig",
+    "foliage",
+    "flower",
+    "star",
+    "mist",
+    "cloud",
+    "rain",
+    "bokeh",
+    "ray",
+    "splatter",
+    "glow",
+    "stipple",
+    "impasto",
+    "fan",
+    "conte",
+    "granulation",
+    "salt",
+    "halftone",
+    "scales",
+    "crosshatch",
+    "honeycomb",
+    "ridges",
+];
+
+/// Generator of a built-in asset by name.
+fn generate(name: &str) -> Option<(u32, u32, Vec<u8>)> {
+    Some(match name {
+        "bristle_round" => procedural::bristle_round(),
+        "bristle_flat" => procedural::bristle_flat(),
+        "dry" => procedural::dry(),
+        "speckle" => procedural::speckle(),
+        "chalk" => procedural::chalk(),
+        "sponge" => procedural::sponge(),
+        "paper" => procedural::paper(),
+        "canvas" => procedural::canvas(),
+        "sumi" => p2::sumi(),
+        "dry_bristle" => p2::dry_bristle(),
+        "bloom" => p2::bloom(),
+        "grass" => p2::grass(),
+        "leaf" => p2::leaf(),
+        "fur" => p2::fur(),
+        "hair" => p2::hair(),
+        "twig" => p2::twig(),
+        "foliage" => p2::foliage(),
+        "flower" => p2::flower(),
+        "star" => p2::star(),
+        "mist" => p2::mist(),
+        "cloud" => p2::cloud(),
+        "rain" => p2::rain(),
+        "bokeh" => p2::bokeh(),
+        "ray" => p2::ray(),
+        "splatter" => p2::splatter(),
+        "glow" => p2::glow(),
+        "stipple" => p2::stipple(),
+        "impasto" => p2::impasto(),
+        "fan" => p2::fan(),
+        "conte" => p2::conte(),
+        "granulation" => p2::granulation(),
+        "salt" => p2::salt(),
+        "halftone" => p2::halftone(),
+        "scales" => p2::scales(),
+        "crosshatch" => p2::crosshatch(),
+        "honeycomb" => p2::honeycomb(),
+        "ridges" => p2::ridges(),
+        _ => return None,
+    })
+}
 
 struct Builtins {
     store: AssetStore,
@@ -78,19 +241,11 @@ fn builtins() -> &'static Builtins {
         let mut store = AssetStore::new();
         let mut by_name = Vec::new();
         for name in BUILTIN_ASSET_NAMES {
-            let (w, h, m) = match name {
-                "bristle_round" => procedural::bristle_round(),
-                "bristle_flat" => procedural::bristle_flat(),
-                "dry" => procedural::dry(),
-                "speckle" => procedural::speckle(),
-                "chalk" => procedural::chalk(),
-                "sponge" => procedural::sponge(),
-                "paper" => procedural::paper(),
-                _ => procedural::canvas(),
-            };
             // Generated masks are within bounds by construction; a failure would be a bug and
             // simply leaves the asset out (presets then use the documented round fallback).
-            if let Ok(a) = BrushAsset::from_mask(w, h, m) {
+            if let Some((w, h, m)) = generate(name)
+                && let Ok(a) = BrushAsset::from_mask(w, h, m)
+            {
                 by_name.push((name, a.hash().to_string()));
                 store.insert(std::sync::Arc::new(a));
             }
@@ -222,6 +377,21 @@ fn with_pressure(mut p: BrushPreset, f: impl FnOnce(&mut DynamicsSource)) -> Bru
 
 /// The built-in presets in display order (stable ids [`BUILTIN_IDS`]).
 pub fn builtin_presets() -> Vec<BrushPreset> {
+    table().to_vec()
+}
+
+/// Built-in preset by stable id.
+pub fn builtin_preset(id: &str) -> Option<BrushPreset> {
+    table().iter().find(|p| p.id == id).cloned()
+}
+
+/// The built-in presets, built once per process (they are constants of the build).
+fn table() -> &'static [BrushPreset] {
+    static T: OnceLock<Vec<BrushPreset>> = OnceLock::new();
+    T.get_or_init(build_presets)
+}
+
+fn build_presets() -> Vec<BrushPreset> {
     use BrushCategory as C;
     let id1 = ResponseCurve::identity;
     let pen_brush_curve = curve(&[
@@ -600,6 +770,8 @@ pub fn builtin_presets() -> Vec<BrushPreset> {
             ..new_builtin("eraser.textured", "Textured eraser", C::Eraser, 24.0, 0.6)
         },
     ];
+    all.extend(wave2::presets());
+    all.sort_by_key(|p| BUILTIN_IDS.iter().position(|id| *id == p.id).unwrap_or(usize::MAX));
     // An image the generator could not provide would make the preset invalid; degrade to the
     // documented fallback (round tip / procedural grain) instead of shipping an invalid preset.
     for p in &mut all {
@@ -615,11 +787,6 @@ pub fn builtin_presets() -> Vec<BrushPreset> {
         }
     }
     all
-}
-
-/// Built-in preset by stable id.
-pub fn builtin_preset(id: &str) -> Option<BrushPreset> {
-    builtin_presets().into_iter().find(|p| p.id == id)
 }
 
 #[cfg(test)]
@@ -642,20 +809,39 @@ mod tests {
     #[test]
     fn categories_cover_the_requested_families() {
         let all = builtin_presets();
-        assert_eq!(all.len(), 30);
+        assert_eq!(all.len(), 70);
         for c in [
             BrushCategory::Pencil,
             BrushCategory::Ink,
+            BrushCategory::Calligraphy,
             BrushCategory::Marker,
             BrushCategory::Paint,
+            BrushCategory::Watercolor,
             BrushCategory::Airbrush,
             BrushCategory::Texture,
+            BrushCategory::Nature,
+            BrushCategory::Effect,
+            BrushCategory::Pattern,
             BrushCategory::Eraser,
         ] {
             assert!(all.iter().filter(|p| p.category == c).count() >= 3, "{c:?}");
         }
         for id in LEGACY_BUILTIN_IDS {
             assert!(BUILTIN_IDS.contains(&id));
+        }
+        // The first wave keeps its relative display order; every id is unique.
+        let pos = |id: &str| BUILTIN_IDS.iter().position(|x| *x == id);
+        let first: Vec<usize> = FIRST_WAVE_IDS.iter().map(|id| pos(id).unwrap()).collect();
+        assert!(first.windows(2).all(|w| w[0] < w[1]));
+        let mut ids = BUILTIN_IDS.to_vec();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), BUILTIN_IDS.len());
+        // New ids are prefixed by their category.
+        for p in &all {
+            if !FIRST_WAVE_IDS.contains(&p.id.as_str()) {
+                assert!(p.id.starts_with(&format!("{}.", p.category.as_str())), "{}", p.id);
+            }
         }
     }
 }

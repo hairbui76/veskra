@@ -49,11 +49,12 @@ mod procedural;
 mod renderer;
 pub mod smudge;
 mod stamp;
+mod tip;
 
 pub use asset::{AssetStore, BrushAsset, ImportedMask, MaskChannel, ResolvedAssets};
 pub use builtin::{
-    BUILTIN_ASSET_NAMES, BUILTIN_IDS, LEGACY_BUILTIN_IDS, builtin_asset_hash, builtin_assets, builtin_preset,
-    builtin_presets,
+    BUILTIN_ASSET_NAMES, BUILTIN_IDS, FIRST_WAVE_IDS, LEGACY_BUILTIN_IDS, builtin_asset_hash, builtin_assets,
+    builtin_preset, builtin_presets,
 };
 pub use curve::{MAX_CURVE_POINTS, ResponseCurve};
 pub use error::BrushError;
@@ -68,3 +69,4 @@ pub use renderer::{
     StrokeContext, StrokeMode, StrokeRenderer, StrokeStats, composite_layered,
 };
 pub use smudge::{FinishedSmudge, MAX_SMUDGE_SIZE_PX, SmudgeContext, SmudgeParams, SmudgeStroke};
+pub use tip::{MAX_TIP_PREVIEW_PX, TipPreview, render_tip};

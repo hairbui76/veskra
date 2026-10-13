@@ -140,7 +140,8 @@ fn list_contains_builtins_first_and_library_commands_need_an_open_library() {
     let mut s = session();
     let list = ok(&mut s, json!({"cmd": "brush.list"}));
     let presets = list["presets"].as_array().unwrap();
-    assert_eq!(presets.len(), 30);
+    assert_eq!(presets.len(), veskra_brush::BUILTIN_IDS.len());
+    assert_eq!(presets.len(), 70);
     let ids: Vec<&str> = presets.iter().map(|p| p["id"].as_str().unwrap()).collect();
     assert_eq!(ids, veskra_brush::BUILTIN_IDS);
     for p in presets {
@@ -247,8 +248,9 @@ fn save_update_duplicate_delete_export_import_round_trip() {
     // List order: built-ins, then user brushes; library edits are not document edits.
     let list = ok(&mut s, json!({"cmd": "brush.list"}));
     let ps = list["presets"].as_array().unwrap();
-    assert_eq!(ps.len(), 33);
-    assert!(ps[30..].iter().all(|x| x["editable"] == true && x["source"] == "custom"));
+    let n = veskra_brush::BUILTIN_IDS.len();
+    assert_eq!(ps.len(), n + 3);
+    assert!(ps[n..].iter().all(|x| x["editable"] == true && x["source"] == "custom"));
     assert_eq!(s.version(), v0);
 
     // Export / import into a fresh library keeps the brush and its assets.
