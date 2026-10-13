@@ -121,6 +121,17 @@ object Commands {
     /** Writes a `.vbrush` (Veskra's own brush file). */
     fun brushExport(id: String, path: String): JsonObject = json { "cmd" to "brush.export"; "id" to id; "path" to path }
 
+    /** The tip as one dab on a transparent square (base64 PNG), [size] 16..512 px. */
+    fun brushTipPreview(id: String, size: Int, color: HexColor = HexColor(0x111111)): JsonObject {
+        require(size in 16..512) { "tip preview size out of range" }
+        return json {
+            "cmd" to "brush.tip_preview"
+            "id" to id
+            "size" to size
+            "color" to color.toHex()
+        }
+    }
+
     /** Stroke thumbnail as base64 PNG, at most 1024×256. */
     fun brushPreview(id: String, width: Int, height: Int): JsonObject {
         require(width in 1..1024 && height in 1..256) { "preview size out of range" }

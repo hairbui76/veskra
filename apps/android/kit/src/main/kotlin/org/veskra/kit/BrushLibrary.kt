@@ -23,7 +23,10 @@ data class BrushInfo(
     companion object {
         /** Display order of categories; unknown ones go after these, alphabetically. */
         val CATEGORY_ORDER: List<String> =
-            listOf("pencil", "ink", "marker", "paint", "airbrush", "texture", "effect", "smudge", "eraser", "custom", "imported")
+            listOf(
+                "pencil", "ink", "calligraphy", "marker", "paint", "watercolor", "airbrush", "texture", "nature", "pattern",
+                "effect", "smudge", "eraser", "custom", "imported",
+            )
 
         fun fromJson(o: JsonObject): BrushInfo? {
             val id = o.string("id") ?: return null

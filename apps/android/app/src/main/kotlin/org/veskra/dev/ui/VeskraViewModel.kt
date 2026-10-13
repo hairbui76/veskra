@@ -1268,6 +1268,7 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         previewCache.clear()
+        tipCache.clear()
     }
 
     /** id@version → thumbnail; cleared whenever the list or the color changes. */
@@ -1293,6 +1294,26 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
             }
         } ?: return null
         previewCache[key] = bmp
+        return bmp
+    }
+
+    /** id@version → tip thumbnail (drawn in a fixed dark ink so every tip reads on the card). */
+    private val tipCache = HashMap<String, android.graphics.Bitmap>()
+
+    /** The brush tip as one dab; null when the engine cannot draw it (older engine, missing asset). */
+    suspend fun brushTip(b: BrushInfo, sizePx: Int): android.graphics.Bitmap? {
+        val key = "${b.id}@${b.version}"
+        tipCache[key]?.let { return it }
+        val png = query(Commands.brushTipPreview(b.id, sizePx))?.string("png") ?: return null
+        val bmp = withContext(Dispatchers.Default) {
+            try {
+                val bytes = java.util.Base64.getDecoder().decode(png)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        } ?: return null
+        tipCache[key] = bmp
         return bmp
     }
 

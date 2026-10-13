@@ -245,6 +245,10 @@
     <string name="brush_category_all">All</string>
     <string name="brush_category_pencil">Pencils</string>
     <string name="brush_category_ink">Inks</string>
+    <string name="brush_category_calligraphy">Calligraphy</string>
+    <string name="brush_category_watercolor">Watercolor</string>
+    <string name="brush_category_nature">Nature</string>
+    <string name="brush_category_pattern">Patterns</string>
     <string name="brush_category_marker">Markers</string>
     <string name="brush_category_paint">Paint</string>
     <string name="brush_category_airbrush">Airbrush</string>

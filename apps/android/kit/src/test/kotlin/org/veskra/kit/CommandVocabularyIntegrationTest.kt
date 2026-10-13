@@ -186,7 +186,12 @@ class CommandVocabularyIntegrationTest {
             val list = BrushInfo.listFromJson(exec(h, Commands.brushList()) as JsonObject)
             assertTrue(list.size >= 30, "built-ins: ${list.size}")
             assertTrue(list.all { it.isBuiltIn && !it.editable })
-            for (b in list) exec(h, Commands.brushSelect(b.id))
+            for (b in list) {
+                exec(h, Commands.brushSelect(b.id))
+                val tip = exec(h, Commands.brushTipPreview(b.id, 96)) as JsonObject
+                assertEquals(96, tip.int("width"), b.id)
+                assertTrue(java.util.Base64.getDecoder().decode(tip.string("png")!!).size > 60, "tip png for ${b.id}")
+            }
             assertTrue(list.map { it.category }.toSet().containsAll(listOf("pencil", "ink", "marker", "paint", "airbrush", "texture", "eraser")))
 
             // Duplicate a built-in, give it an image tip from a PNG, save, preview, export, re-import.

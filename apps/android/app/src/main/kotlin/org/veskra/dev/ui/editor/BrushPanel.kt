@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,6 +72,10 @@ import kotlin.math.roundToInt
 private fun categoryName(category: String): Int? = when (category) {
     "pencil" -> R.string.brush_category_pencil
     "ink" -> R.string.brush_category_ink
+    "calligraphy" -> R.string.brush_category_calligraphy
+    "watercolor" -> R.string.brush_category_watercolor
+    "nature" -> R.string.brush_category_nature
+    "pattern" -> R.string.brush_category_pattern
     "marker" -> R.string.brush_category_marker
     "paint" -> R.string.brush_category_paint
     "airbrush" -> R.string.brush_category_airbrush
@@ -112,9 +117,9 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
         exporting = null
     }
 
-    FloatingPanel(modifier.widthIn(max = 520.dp)) {
+    FloatingPanel(modifier.widthIn(max = 640.dp)) {
         Column(
-            Modifier.padding(16.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+            Modifier.padding(16.dp).heightIn(max = 640.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.smudge) {
@@ -182,7 +187,10 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
     state.brushImport?.let { ImportReportDialog(it, onDismiss = vm::dismissBrushImport) }
 }
 
-/** One library entry: stroke thumbnail, name, and a menu (duplicate, export, delete). */
+/**
+ * One library entry: the tip as a square swatch (what touches the canvas), a stroke sample in the
+ * current color, the name, and a menu (edit, duplicate, export, delete).
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BrushCard(
@@ -195,7 +203,11 @@ private fun BrushCard(
 ) {
     val colors = MaterialTheme.colorScheme
     var preview by remember(brush.id, brush.version) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(brush.id, brush.version) { preview = vm.brushPreview(brush, PREVIEW_W, PREVIEW_H) }
+    var tip by remember(brush.id, brush.version) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(brush.id, brush.version) {
+        tip = vm.brushTip(brush, TIP_PX)
+        preview = vm.brushPreview(brush, PREVIEW_W, PREVIEW_H)
+    }
     var menu by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
     Column(
@@ -207,8 +219,16 @@ private fun BrushCard(
             .semantics { this.selected = selected }
             .padding(start = 10.dp, top = 8.dp, bottom = 6.dp),
     ) {
-        Box(Modifier.fillMaxWidth().padding(end = 10.dp).height(44.dp).clip(RoundedCornerShape(8.dp)).background(Color.White)) {
-            preview?.let { Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().height(44.dp)) }
+        Row(Modifier.padding(end = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(TIP_BACKGROUND),
+                contentAlignment = Alignment.Center,
+            ) {
+                tip?.let { Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(56.dp)) }
+            }
+            Box(Modifier.weight(1f).height(64.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)) {
+                preview?.let { Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().height(64.dp)) }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(top = 4.dp)) {
@@ -238,8 +258,12 @@ private fun BrushCard(
     }
 }
 
-private const val PREVIEW_W = 360
-private const val PREVIEW_H = 72
+private const val PREVIEW_W = 400
+private const val PREVIEW_H = 128
+private const val TIP_PX = 128
+
+/** Light paper tone behind tips, so dark ink tips read and white areas of a tip still show. */
+private val TIP_BACKGROUND = Color(0xFFEDEAE3)
 
 @Composable
 private fun ImportReportDialog(report: BrushImportReport, onDismiss: () -> Unit) {
