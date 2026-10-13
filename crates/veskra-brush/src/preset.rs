@@ -58,6 +58,8 @@ pub const MIN_ROUNDNESS: f32 = 0.05;
 pub const MAX_FOLDER_BYTES: usize = 255;
 
 /// UI category of a brush (grouping only; behaviour is described by the other fields).
+/// `watercolor`, `calligraphy`, `nature` and `pattern` were added by ADR-019 amendment 1; a build
+/// that predates them loads them as `custom` (`#[serde(other)]`), as it does any unknown value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BrushCategory {
@@ -71,6 +73,10 @@ pub enum BrushCategory {
     Eraser,
     Smudge,
     Imported,
+    Watercolor,
+    Calligraphy,
+    Nature,
+    Pattern,
     /// Also what an unknown category written by a newer build loads as.
     #[default]
     #[serde(other)]
@@ -90,6 +96,10 @@ impl BrushCategory {
             BrushCategory::Eraser => "eraser",
             BrushCategory::Smudge => "smudge",
             BrushCategory::Imported => "imported",
+            BrushCategory::Watercolor => "watercolor",
+            BrushCategory::Calligraphy => "calligraphy",
+            BrushCategory::Nature => "nature",
+            BrushCategory::Pattern => "pattern",
             BrushCategory::Custom => "custom",
         }
     }
@@ -497,7 +507,9 @@ impl BrushPreset {
     /// untextured, round (circular) paint brush whose per-dab alpha is constant 1 under `Max`
     /// accumulation, without jitter, wet edges or velocity dynamics, so its coverage is exactly a
     /// union of discs that a filled outline reproduces. Pressure- and tilt-driven *size* are
-    /// allowed (the outline follows them).
+    /// allowed (the outline follows them). The inherently textural categories (airbrush, texture,
+    /// effect, and since ADR-019 amendment 1 watercolor, nature and pattern) are never eligible;
+    /// `calligraphy` is judged by the brush's features like `ink` or `paint`.
     pub fn satisfies_vector_rule(&self) -> bool {
         let d = &self.dynamics;
         !self.eraser
@@ -508,6 +520,9 @@ impl BrushPreset {
                     | BrushCategory::Texture
                     | BrushCategory::Smudge
                     | BrushCategory::Effect
+                    | BrushCategory::Watercolor
+                    | BrushCategory::Nature
+                    | BrushCategory::Pattern
             )
             && self.tip.shape == TipShape::Round
             && self.tip.roundness == 1.0

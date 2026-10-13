@@ -7,6 +7,8 @@
 
 use crate::noise::splitmix64;
 
+pub(crate) mod wave2;
+
 /// Uniform value in `[0, 1)` for (seed, n).
 fn h01(seed: u64, n: u64) -> f64 {
     (splitmix64(seed ^ splitmix64(n.wrapping_add(0x51A7_0C0F_FEE5_EED5))) >> 11) as f64 / (1u64 << 53) as f64

@@ -338,18 +338,19 @@ tools active).
 ## Brush library (ADR-019)
 
 Source: `crates/veskra-engine/src/{brushlib.rs,session/brushes.rs}`, `crates/veskra-brush`.
-Tests: `crates/veskra-engine/tests/brush_library.rs`, `crates/veskra-brush/tests/{presets,brush_v2,interop_ip,legacy_regression}.rs`.
+Tests: `crates/veskra-engine/tests/brush_library.rs`, `crates/veskra-brush/tests/{presets,brush_v2,builtin_wave2,interop_ip,legacy_regression}.rs`.
 
 Library commands are **not document edits**: they never change the document, `version` or the
 undo history. The app owns the storage directory and calls `brush.library.open` once per session;
 every later change is persisted there (temp file + rename). Commands that need it fail with
-`InvalidState` until then (`brush.list`, `brush.get`, `brush.select`, `brush.preview` work with the
-built-ins without a library). Result `warnings` arrays are human-readable and may be shown as is.
+`InvalidState` until then (`brush.list`, `brush.get`, `brush.select`, `brush.preview`,
+`brush.tip_preview` work with the built-ins without a library). Result `warnings` arrays are
+human-readable and may be shown as is.
 
 | Command | Fields | Result / notes |
 |---|---|---|
 | `brush.library.open` | `dir` (absolute) | `{dir, brushes, assets, warnings}`. Creates `dir` (and `dir/assets`) if missing, loads `dir/*.vbrush` and `dir/assets/<hash>.png`; unreadable / invalid / duplicate / built-in-id files are skipped and named in `warnings`. Replaces a previously opened library |
-| `brush.list` | — | `{presets: [{id, name, category, source, folder, vectorEligible, eraser, version, editable, current}], current}` — the 30 built-ins in display order, then library brushes sorted by `folder`, `name`, `id`. `editable` = not built-in. `current` (top level) = the session brush: `{id, name, size, opacity, flow, stabilization, vectorEligible, eraser, category, source, version}` |
+| `brush.list` | — | `{presets: [{id, name, category, source, folder, vectorEligible, eraser, version, editable, current}], current}` — the 70 built-ins in display order (see *Built-in brushes*), then library brushes sorted by `folder`, `name`, `id`. `editable` = not built-in. `current` (top level) = the session brush: `{id, name, size, opacity, flow, stabilization, vectorEligible, eraser, category, source, version}` |
 | `brush.get` | `id` | `{preset, editable, assets: [{hash, width, height, available}]}`; `preset` is the full schema-3 JSON below |
 | `brush.save` | `preset` (schema-3 object), `assets`? `{ "<key>": "/abs/file.png" \| {"path", "channel"?: auto\|alpha\|luminance\|darkness, "invert"?: bool} }` | `{id, version, vectorEligible, warnings}`. See *Saving* |
 | `brush.asset.add` | `path` (absolute PNG), `channel`? = `auto`, `invert`? = false | `{hash, width, height, channel, downscaledFrom}` — converts the PNG to a coverage mask, stores it as `dir/assets/<hash>.png`; use `hash` as `tip.image` / `texture.image`. `channel` is the one actually used (`auto` resolved); `downscaledFrom` = `[w, h]` when the source was larger than 2048 px, else `null` |
@@ -358,6 +359,7 @@ built-ins without a library). Result `warnings` arrays are human-readable and ma
 | `brush.import` | `path` (absolute) | `{imported: [{id, name, folder, approximated, unsupported}], failed: [{name, reason}], warnings}`. See *Import* |
 | `brush.export` | `id`, `path` (must end in `.vbrush`) | `{path, bytes}`; any brush, built-ins included. Never writes `.prbr` |
 | `brush.preview` | `id`, `width` 16..=1024, `height` 16..=256 | `{png, width, height, sizePx, synthetic: true}` — see *Preview* |
+| `brush.tip_preview` | `id`, `size`? 16..=512 = 128, `color`? `#RRGGBB` = `#111111` | `{png, width, height}` (`width` = `height` = `size`) — see *Tip preview* |
 
 **Saving.** `brush.save` is strict: unknown preset fields are `InvalidArgument` (listing them).
 `schema` defaults to 3. `id`: the id of an existing library brush updates it (`version` + 1); an
@@ -392,6 +394,108 @@ the current color, brush size capped at 45 % of the height. Erasers erase a ligh
 `png` is base64 (RFC 4648) of an sRGB-tagged PNG holding **straight-alpha** RGBA8 (PNG has no
 premultiplied mode; Android's `BitmapFactory` premultiplies on decode).
 
+**Tip preview** (`brush.tip_preview`, ADR-019 amendment 1). The footprint of **one dab** of the
+brush, centered and scaled to fill the `size × size` square (1 px margin), on a transparent
+background: `png` is base64 of an sRGB-tagged 8-bit RGBA PNG with **straight alpha**, RGB =
+`color` exactly wherever alpha > 0, alpha = dab coverage, fully transparent pixels `0,0,0,0`.
+What is shown: the tip (round with its hardness falloff, or the tip image) at the preset's default
+`tip.angle` and `tip.roundness` (a `direction` tip as if moving right, a `pen` tip without
+azimuth), at full strength; a texture whose `mode` is `follow` is applied at its `depth`, scaled
+with the tip as it is at the brush's `size_px`. Not shown: `fixed` (paper) textures, `flow`,
+`opacity`, dynamics, jitter, wet edges and color jitter (the stroke sample, `brush.preview`, shows
+those). Erasers show their footprint like any other brush. A tip image that cannot be resolved is
+drawn as the round fallback, as strokes do. Same lookup as `brush.preview` (built-in, library or
+the session's current brush). Deterministic; nothing is stored. Errors: `InvalidArgument` (`size`
+outside 16..=512 or not an integer, `color` not exactly `#RRGGBB`, unknown field, missing `id`),
+`NotFound` (unknown id); explicit `null` = default. Cost (release build, one Windows desktop CPU,
+host only): all 70 built-ins at 128 px ≈ 15 ms in total on a quiet machine, ≈ 40–50 ms under load
+(`crates/veskra-engine/tests/brush_library.rs`, `perf_tip_and_stroke_previews_of_all_builtins`).
+
+### Built-in brushes
+
+70 original presets in `brush.list` display order (ADR-019 and amendment 1). All images are
+generated procedurally in Rust (no image comes from any app or pack); the asset content hashes
+are pinned in `tests/fixtures/brushes/builtin_asset_hashes.txt`. Wave 1 = the 30 brushes before
+amendment 1 (parameters and renders frozen); wave 2 = the 40 added by it. "Vector" =
+`vectorEligible`.
+
+| Id | Name | Category | Size px | Vector | Wave |
+|---|---|---|---|---|---|
+| `pencil.hb` | HB pencil | pencil | 3.5 | | 1 |
+| `pencil.2b` | 2B pencil | pencil | 5 | | 1 |
+| `pencil.mechanical` | Mechanical pencil | pencil | 2 | | 1 |
+| `pencil.smooth` | Smooth pencil | pencil | 4 | yes | 1 |
+| `pencil.rough` | Rough pencil | pencil | 5 | | 1 |
+| `pencil.colored` | Colored pencil | pencil | 6 | | 2 |
+| `pencil.charcoal` | Charcoal pencil | pencil | 7 | | 2 |
+| `pencil.graphite_stick` | Graphite stick | pencil | 26 | | 2 |
+| `ink.gpen` | G-pen | ink | 9 | yes | 1 |
+| `pen.technical` | Technical pen | ink | 3 | yes | 1 |
+| `ink.fineliner` | Fineliner | ink | 2.5 | yes | 1 |
+| `pen.brush` | Brush pen | ink | 12 | yes | 1 |
+| `ink.dry` | Dry ink brush | ink | 18 | | 1 |
+| `ink.ballpoint` | Ballpoint pen | ink | 2.4 | | 2 |
+| `calligraphy.dip_pen` | Dip pen | calligraphy | 8 | | 2 |
+| `calligraphy.brush_marker` | Brush marker | calligraphy | 16 | yes | 2 |
+| `calligraphy.flat_nib` | Flat nib | calligraphy | 24 | | 2 |
+| `calligraphy.sumi` | Sumi-e brush | calligraphy | 36 | | 2 |
+| `marker.felt` | Felt-tip marker | marker | 14 | | 1 |
+| `marker` | Marker | marker | 16 | yes | 1 |
+| `marker.alcohol` | Alcohol marker (blendy) | marker | 24 | | 1 |
+| `marker.highlighter` | Highlighter | marker | 22 | | 2 |
+| `round.hard` | Hard round | paint | 20 | yes | 1 |
+| `paint.round_bristle` | Round bristle | paint | 30 | | 1 |
+| `paint.flat_oil` | Flat oil | paint | 36 | | 1 |
+| `paint.gouache` | Gouache | paint | 26 | | 1 |
+| `paint.knife` | Palette knife | paint | 34 | | 1 |
+| `paint.impasto` | Impasto | paint | 40 | | 2 |
+| `paint.fan` | Fan brush | paint | 56 | | 2 |
+| `watercolor.round` | Watercolor round | watercolor | 28 | | 2 |
+| `watercolor.wet_wash` | Wet wash | watercolor | 70 | | 2 |
+| `watercolor.granulating` | Granulating wash | watercolor | 56 | | 2 |
+| `watercolor.dry_brush` | Dry brush | watercolor | 40 | | 2 |
+| `watercolor.bleed` | Bleeding edge | watercolor | 64 | | 2 |
+| `watercolor.salt` | Salt texture | watercolor | 60 | | 2 |
+| `airbrush.soft` | Soft airbrush | airbrush | 80 | | 1 |
+| `round.soft` | Soft round (airbrush) | airbrush | 40 | | 1 |
+| `airbrush.spray` | Spray / speckle | airbrush | 60 | | 1 |
+| `airbrush.grainy` | Grainy airbrush | airbrush | 90 | | 2 |
+| `charcoal` | Charcoal | texture | 14 | | 1 |
+| `texture.chalk` | Chalk | texture | 22 | | 1 |
+| `texture.pastel` | Soft pastel | texture | 30 | | 1 |
+| `texture.crayon` | Wax crayon | texture | 12 | | 1 |
+| `texture.sponge` | Rough sponge | texture | 50 | | 1 |
+| `texture.conte` | Conté crayon | texture | 18 | | 2 |
+| `nature.grass` | Grass | nature | 70 | | 2 |
+| `nature.foliage` | Foliage | nature | 64 | | 2 |
+| `nature.leaves` | Falling leaves | nature | 36 | | 2 |
+| `nature.flowers` | Flowers | nature | 36 | | 2 |
+| `nature.twigs` | Twigs | nature | 60 | | 2 |
+| `nature.fur` | Fur | nature | 40 | | 2 |
+| `nature.hair` | Hair strands | nature | 28 | | 2 |
+| `effect.glitter` | Glitter | effect | 40 | | 1 |
+| `effect.sparkle` | Sparkles | effect | 50 | | 2 |
+| `effect.bokeh` | Bokeh | effect | 70 | | 2 |
+| `effect.glow` | Glow | effect | 50 | | 2 |
+| `effect.light_rays` | Light rays | effect | 220 | | 2 |
+| `effect.fog` | Fog / mist | effect | 160 | | 2 |
+| `effect.rain` | Rain | effect | 80 | | 2 |
+| `effect.snow` | Snow | effect | 20 | | 2 |
+| `effect.splatter` | Ink splatter | effect | 70 | | 2 |
+| `pattern.halftone` | Halftone dots | pattern | 80 | | 2 |
+| `pattern.stipple` | Stipple | pattern | 50 | | 2 |
+| `pattern.crosshatch` | Cross-hatch | pattern | 50 | | 2 |
+| `pattern.scales` | Scales | pattern | 80 | | 2 |
+| `pattern.honeycomb` | Honeycomb | pattern | 80 | | 2 |
+| `pattern.clouds` | Clouds | pattern | 90 | | 2 |
+| `eraser.hard` | Hard eraser | eraser | 20 | | 1 |
+| `eraser.soft` | Soft eraser | eraser | 40 | | 1 |
+| `eraser.textured` | Textured eraser | eraser | 24 | | 1 |
+
+New brushes with velocity dynamics (`calligraphy.dip_pen`: faster = thinner; `calligraphy.sumi`:
+faster = drier) respond to mouse input too; everything driven by pressure uses the 0.5 fallback
+without hardware pressure (see `stroke.samples`).
+
 **`.vbrush`** (Veskra brush file): ZIP with `mimetype` = `application/x-veskra-brush` (STORE,
 first), `brush.json` (schema-3 preset, pretty JSON) and `assets/<hash>.png` (STORE) for every image
 the preset references, built-in images included, so the file is self-contained. `<hash>` is the
@@ -415,7 +519,7 @@ counter-clockwise on screen. Missing fields take the defaults in brackets.
 | `id` | `[a-z0-9._-]{1,64}` | stable id |
 | `version` | u32 [1] | content revision (recorded in strokes) |
 | `name` | ≤ 255 bytes, no control chars [""] | |
-| `category` | `pencil\|ink\|marker\|paint\|airbrush\|texture\|effect\|eraser\|smudge\|imported\|custom` [custom] | unknown values load as `custom` |
+| `category` | `pencil\|ink\|calligraphy\|marker\|paint\|watercolor\|airbrush\|texture\|nature\|effect\|pattern\|eraser\|smudge\|imported\|custom` [custom] | unknown values load as `custom` (builds before ADR-019 amendment 1 load `calligraphy`, `watercolor`, `nature`, `pattern` as `custom`) |
 | `source` | `builtin\|custom\|imported:<format>` [custom] | |
 | `folder` | ≤ 255 bytes [""] | library grouping |
 | `size_px` | (0, 1000] [10] | diameter at full dynamics |
@@ -444,7 +548,7 @@ counter-clockwise on screen. Missing fields take the defaults in brackets.
 | `wet_edges` | 0..1 [0] | stroke interior keeps 1 − 0.75·wet of its coverage, rim keeps all |
 | `accumulation` | `max\|build_up` [max] | |
 | `eraser` | bool [false] | destination-out brush |
-| `vector_eligible` | bool | must satisfy the vector rule (round circular tip, hardness ≥ 0.5, flow 1, `max`, no texture / jitter / wet edges / velocity dynamics, opacity & flow dynamics constant 1, not eraser/airbrush/texture/smudge/effect category); `brush.save` computes it |
+| `vector_eligible` | bool | must satisfy the vector rule (round circular tip, hardness ≥ 0.5, flow 1, `max`, no texture / jitter / wet edges / velocity dynamics, opacity & flow dynamics constant 1, not eraser/airbrush/texture/smudge/effect/watercolor/nature/pattern category); `brush.save` computes it |
 | `stabilization` | 0..1 [0] | |
 
 Example (`brush.get {"id": "paint.round_bristle"}` → `preset`, dynamics shortened):

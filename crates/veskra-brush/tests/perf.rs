@@ -149,3 +149,36 @@ fn perf_dabs_per_second_image_tip_vs_round() {
         );
     }
 }
+
+/// ADR-019 amendment 1: one-time generation of the built-in procedural assets (run this test
+/// alone so nothing generated them before), `builtin_presets()` and the tip footprint of every
+/// built-in at 128 px (rasterization only; the engine adds PNG + base64).
+#[test]
+#[ignore = "performance probe; run alone in release with --ignored --exact --nocapture"]
+fn perf_builtin_assets_presets_and_tips() {
+    use veskra_brush::{ResolvedAssets, builtin_assets, builtin_presets, render_tip};
+    let t0 = Instant::now();
+    let n = builtin_assets().len();
+    eprintln!(
+        "HOST CPU: generating {n} built-in assets: {:.1} ms (once per process)",
+        t0.elapsed().as_secs_f64() * 1e3
+    );
+    let t0 = Instant::now();
+    for _ in 0..20 {
+        assert_eq!(builtin_presets().len(), veskra_brush::BUILTIN_IDS.len());
+    }
+    eprintln!("HOST CPU: builtin_presets(): {:.3} ms per call", t0.elapsed().as_secs_f64() * 1e3 / 20.0);
+    let all = builtin_presets();
+    for round in 0..3 {
+        let t0 = Instant::now();
+        for p in &all {
+            let t = render_tip(p, &ResolvedAssets::resolve(p, &[builtin_assets()]), 128).unwrap();
+            assert_eq!(t.coverage.len(), 128 * 128);
+        }
+        eprintln!(
+            "HOST CPU round {round}: {} tip footprints at 128 px: {:.1} ms",
+            all.len(),
+            t0.elapsed().as_secs_f64() * 1e3
+        );
+    }
+}

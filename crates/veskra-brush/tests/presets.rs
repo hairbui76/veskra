@@ -130,6 +130,8 @@ fn errors_map_to_veskra_codes() {
 fn vector_eligibility_matches_rule() {
     let expect_eligible =
         ["pencil.smooth", "pen.technical", "pen.brush", "marker", "round.hard", "ink.gpen", "ink.fineliner"];
+    // Second wave (ADR-019 amendment 1): only the brush marker is eligible.
+    let expect_eligible: Vec<&str> = expect_eligible.into_iter().chain(["calligraphy.brush_marker"]).collect();
     for p in builtin_presets() {
         let eligible = expect_eligible.contains(&p.id.as_str());
         assert_eq!(p.vector_eligible, eligible, "{}", p.id);

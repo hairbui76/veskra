@@ -140,7 +140,8 @@ fn list_contains_builtins_first_and_library_commands_need_an_open_library() {
     let mut s = session();
     let list = ok(&mut s, json!({"cmd": "brush.list"}));
     let presets = list["presets"].as_array().unwrap();
-    assert_eq!(presets.len(), 30);
+    assert_eq!(presets.len(), veskra_brush::BUILTIN_IDS.len());
+    assert_eq!(presets.len(), 70);
     let ids: Vec<&str> = presets.iter().map(|p| p["id"].as_str().unwrap()).collect();
     assert_eq!(ids, veskra_brush::BUILTIN_IDS);
     for p in presets {
@@ -247,8 +248,9 @@ fn save_update_duplicate_delete_export_import_round_trip() {
     // List order: built-ins, then user brushes; library edits are not document edits.
     let list = ok(&mut s, json!({"cmd": "brush.list"}));
     let ps = list["presets"].as_array().unwrap();
-    assert_eq!(ps.len(), 33);
-    assert!(ps[30..].iter().all(|x| x["editable"] == true && x["source"] == "custom"));
+    let n = veskra_brush::BUILTIN_IDS.len();
+    assert_eq!(ps.len(), n + 3);
+    assert!(ps[n..].iter().all(|x| x["editable"] == true && x["source"] == "custom"));
     assert_eq!(s.version(), v0);
 
     // Export / import into a fresh library keeps the brush and its assets.
@@ -432,6 +434,142 @@ fn preview_is_a_bounded_png_in_the_current_color() {
         );
     }
     assert_eq!(err(&mut s, json!({"cmd": "brush.preview", "id": "nope", "width": 64, "height": 64})), "not_found");
+}
+
+/// Decoded `brush.tip_preview` result: `(size, rgba)`; the result has exactly the documented keys.
+fn tip(s: &mut Session, cmd: Value) -> (u32, Vec<u8>) {
+    let r = ok(s, cmd);
+    let mut keys: Vec<&str> = r.as_object().unwrap().keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["height", "png", "width"]);
+    let png = b64_decode(r["png"].as_str().unwrap());
+    let (w, h, rgba) = veskra_testkit::decode_png_rgba8(&png).unwrap();
+    assert_eq!((w, h), (r["width"].as_u64().unwrap() as u32, r["height"].as_u64().unwrap() as u32));
+    assert_eq!(w, h);
+    (w, rgba)
+}
+
+#[test]
+fn tip_preview_contract() {
+    let mut s = session();
+    let v0 = s.version();
+    // Defaults: 128 px, #111111, straight alpha on a transparent background.
+    let (n, rgba) = tip(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard"}));
+    assert_eq!(n, 128);
+    let px = |x: u32, y: u32| &rgba[((y * n + x) * 4) as usize..((y * n + x) * 4 + 4) as usize];
+    assert_eq!(px(64, 64), &[0x11, 0x11, 0x11, 255]);
+    assert_eq!(px(0, 0), &[0, 0, 0, 0]);
+    assert!(px(1, 64)[3] > 0 || px(2, 64)[3] > 0, "a round tip fills the square");
+    // Size and color; every painted pixel has exactly the requested color.
+    for id in veskra_brush::BUILTIN_IDS {
+        let (n, rgba) = tip(&mut s, json!({"cmd": "brush.tip_preview", "id": id, "size": 48, "color": "#2a7F3c"}));
+        assert_eq!(n, 48);
+        let painted: Vec<&[u8]> = rgba.chunks_exact(4).filter(|p| p[3] > 0).collect();
+        assert!(painted.len() > 40, "{id}: {}", painted.len());
+        assert!(painted.iter().all(|p| p[..3] == [0x2a, 0x7f, 0x3c]), "{id}");
+        assert!(rgba.chunks_exact(4).filter(|p| p[3] == 0).all(|p| p == [0, 0, 0, 0]), "{id}");
+    }
+    for size in [16, 512] {
+        assert_eq!(tip(&mut s, json!({"cmd": "brush.tip_preview", "id": "nature.leaves", "size": size})).0, size);
+    }
+    // Deterministic.
+    let a = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": "calligraphy.sumi", "size": 96}));
+    let b = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": "calligraphy.sumi", "size": 96}));
+    assert_eq!(a, b);
+    // Explicit nulls take the defaults.
+    let d = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard", "size": null, "color": null}));
+    assert_eq!(d, ok(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard"})));
+    // Typed errors.
+    for bad in [json!(15), json!(513), json!(0), json!(-4), json!(64.5), json!("64")] {
+        assert_eq!(
+            err(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard", "size": bad})),
+            "invalid_argument",
+            "{bad}"
+        );
+    }
+    for bad in ["#12345", "111111", "#11223344", "red", "#GGGGGG", ""] {
+        assert_eq!(
+            err(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard", "color": bad})),
+            "invalid_argument",
+            "{bad}"
+        );
+    }
+    assert_eq!(err(&mut s, json!({"cmd": "brush.tip_preview", "id": "round.hard", "extra": 1})), "invalid_argument");
+    assert_eq!(err(&mut s, json!({"cmd": "brush.tip_preview"})), "invalid_argument");
+    assert_eq!(err(&mut s, json!({"cmd": "brush.tip_preview", "id": "nope"})), "not_found");
+    assert_eq!(s.version(), v0, "previews are not document edits");
+}
+
+#[test]
+fn tip_preview_of_custom_and_imported_brushes_and_follow_texture() {
+    let dir = tmp("tip");
+    let mut s = session();
+    ok(&mut s, json!({"cmd": "brush.library.open", "dir": p(&dir.join("lib"))}));
+    // A custom brush with its own image tip.
+    let png_path = dir.join("tip.png");
+    std::fs::write(&png_path, disc_png(40)).unwrap();
+    let saved = ok(
+        &mut s,
+        json!({"cmd": "brush.save", "preset": {"name": "Disc", "size_px": 20, "tip": {"shape": "image", "image": "t"}},
+               "assets": {"t": p(&png_path)}}),
+    );
+    let id = saved["id"].as_str().unwrap().to_string();
+    let (n, rgba) = tip(&mut s, json!({"cmd": "brush.tip_preview", "id": id, "size": 64}));
+    assert_eq!(n, 64);
+    assert!(rgba.chunks_exact(4).filter(|p| p[3] > 128).count() > 1000);
+    // The texture is shown when it follows the tip, not when it is fixed paper grain.
+    let impasto = ok(&mut s, json!({"cmd": "brush.get", "id": "paint.impasto"}))["preset"].clone();
+    let mut plain = impasto.clone();
+    plain["texture"] = Value::Null;
+    plain["id"] = json!("");
+    let plain_id = ok(&mut s, json!({"cmd": "brush.save", "preset": plain}))["id"].as_str().unwrap().to_string();
+    let with_tex = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": "paint.impasto"}));
+    let without = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": plain_id}));
+    assert_ne!(with_tex["png"], without["png"], "follow texture applied");
+    let mut fixed = impasto;
+    fixed["texture"]["mode"] = json!("fixed");
+    fixed["id"] = json!("");
+    let fixed_id = ok(&mut s, json!({"cmd": "brush.save", "preset": fixed}))["id"].as_str().unwrap().to_string();
+    let fixed_tip = ok(&mut s, json!({"cmd": "brush.tip_preview", "id": fixed_id}));
+    assert_eq!(fixed_tip["png"], without["png"], "fixed texture omitted");
+    // An imported Infinite Painter brush (synthetic .prbr with its own head image).
+    let f = dir.join("a.prbr");
+    std::fs::write(&f, prbr(&fixture("template-properties.json"), Some(&disc_png(32)))).unwrap();
+    let imported = ok(&mut s, json!({"cmd": "brush.import", "path": p(&f)}));
+    let ip_id = imported["imported"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(ok(&mut s, json!({"cmd": "brush.get", "id": ip_id}))["preset"]["tip"]["shape"], "image");
+    let (_, rgba) = tip(&mut s, json!({"cmd": "brush.tip_preview", "id": ip_id}));
+    assert!(rgba.chunks_exact(4).any(|p| p[3] > 0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+#[ignore = "timing probe (host CPU); run in release with --ignored --nocapture"]
+fn perf_tip_and_stroke_previews_of_all_builtins() {
+    // The first session of a process generates the built-in presets and assets (run this probe
+    // alone so nothing did it before).
+    let t = std::time::Instant::now();
+    let mut s = session();
+    eprintln!("first session (incl. built-in asset generation): {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+    for round in 0..3 {
+        let t = std::time::Instant::now();
+        for id in veskra_brush::BUILTIN_IDS {
+            ok(&mut s, json!({"cmd": "brush.tip_preview", "id": id, "size": 128}));
+        }
+        let tips = t.elapsed();
+        let t = std::time::Instant::now();
+        for id in veskra_brush::BUILTIN_IDS {
+            ok(&mut s, json!({"cmd": "brush.preview", "id": id, "width": 320, "height": 80}));
+        }
+        let strokes = t.elapsed();
+        eprintln!(
+            "round {round}: {} tip previews at 128 px: {:.1} ms; {} stroke previews 320x80: {:.1} ms",
+            veskra_brush::BUILTIN_IDS.len(),
+            tips.as_secs_f64() * 1e3,
+            veskra_brush::BUILTIN_IDS.len(),
+            strokes.as_secs_f64() * 1e3
+        );
+    }
 }
 
 #[test]
