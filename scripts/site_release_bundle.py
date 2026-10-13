@@ -5,7 +5,8 @@ domain (GitHub's release file host sends no CORS headers, so a browser cannot fe
 Writes into <out_dir> (default site/download):
   veskra-arm64-v8a.apk, veskra-x86_64.apk, veskra-universal.apk  stable names for the page's links
   SHA256SUMS.txt                                                  as published with the release
-  latest.json   tag, release URL, publish date, and per asset: file, versioned name, size, sha256
+  latest.json   tag, release URL, publish date, release notes, and per asset: file, versioned name,
+                size, sha256 (also read by the app's "Check for updates", ADR-020)
 
 "Newest" includes pre-releases (GitHub's /releases/latest skips them). Uses the GitHub CLI (`gh`),
 authenticated through GH_TOKEN on CI. Checksums are verified against the release's SHA256SUMS.txt.
@@ -84,6 +85,8 @@ def main() -> int:
         "url": release["html_url"],
         "published": release["published_at"] or release["created_at"],
         "prerelease": release["prerelease"],
+        # Shown in the app's update dialog; capped so latest.json stays small.
+        "notes": (release.get("body") or "")[:4000],
         "assets": assets,
     }
     (out / "latest.json").write_text(json.dumps(latest, indent=2) + "\n")

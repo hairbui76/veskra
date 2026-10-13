@@ -106,7 +106,10 @@ jobs:
           else
             flags=()
             [[ "$tag" == *-* ]] && flags+=(--prerelease)
-            gh release create "$tag" dist/* "${flags[@]}" --title "Veskra ${tag#v}" --generate-notes
+            # Hand-written notes in the repo win; they also reach the app's update dialog via latest.json.
+            notes="docs/release/notes/$tag.md"
+            if [[ -f "$notes" ]]; then flags+=(--notes-file "$notes"); else flags+=(--generate-notes); fi
+            gh release create "$tag" dist/* "${flags[@]}" --title "Veskra ${tag#v}"
           fi
 
       - name: Redeploy the website with these APKs

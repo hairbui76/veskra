@@ -2,13 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      Permissions: intentionally NONE.
-      * No INTERNET permission: Veskra is offline-first (MASTER_PLAN §8.4); artwork, brushes and
-        paths never leave the device (AGENTS.md §3).
+      Permissions (ADR-020):
+      * INTERNET and REQUEST_INSTALL_PACKAGES only for "Check for updates", which runs when the user
+        taps it: it downloads download/latest.json and one APK from the Veskra website and hands the
+        APK to the system installer (the user confirms). Veskra is otherwise offline-first
+        (MASTER_PLAN §8.4); artwork, brushes and paths never leave the device (AGENTS.md §3).
       * No READ/WRITE_EXTERNAL_STORAGE / MANAGE_EXTERNAL_STORAGE / READ_MEDIA_*: all user files go
         through the Storage Access Framework (ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT), which
         needs no permission (ARCHITECTURE §G).
     -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Stylus/touch tablets; do not filter out devices without a stylus (finger drawing is allowed). -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -35,6 +40,7 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
+            android:launchMode="singleTop"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

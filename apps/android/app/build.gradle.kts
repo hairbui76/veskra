@@ -30,8 +30,8 @@ android {
         applicationId = "org.veskra.dev"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 4
-        versionName = "0.1.0-alpha.4"
+        versionCode = 5
+        versionName = "0.1.0-alpha.5"
         ndk {
             // arm64-v8a: launch ABI (MASTER_PLAN §1.3). x86_64: emulator/dev only.
             abiFilters += listOf("arm64-v8a", "x86_64")

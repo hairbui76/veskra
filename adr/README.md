@@ -27,3 +27,4 @@ Such ADRs stay provisional until QAP attaches that evidence; they must not be ci
 | [017](ADR-017-tool-set-and-export-color.md) | Painter tool set and export color targets (amends 013 for export) | Accepted (provisional) |
 | [018](ADR-018-cmyk-output.md) | CMYK output: LUT output profiles, PSD/PDF CMYK export, CMYK picker (amends 006, 017) | Accepted (provisional) |
 | [019](ADR-019-brush-system-v2.md) | Brush system v2: schema-3 presets, brush assets, library, Infinite Painter import (amends 004, 009) | Accepted (provisional) |
+| [020](ADR-020-in-app-update.md) | In-app update check: user-initiated, verified APK, system installer | Accepted (provisional) |

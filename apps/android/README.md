@@ -35,7 +35,7 @@ apps/android/
       Geometry.kt            RectI, PointF, Affine (edit.transform convention), ViewState (doc↔view mapping)
     src/test/kotlin/...      JUnit 5 tests incl. NativeBridgeIntegrationTest (skipped without a .so)
   app/                       Android application (namespace/applicationId org.veskra.dev — PROVISIONAL)
-    src/main/AndroidManifest.xml   no permissions at all (no INTERNET, no storage; SAF only)
+    src/main/AndroidManifest.xml   INTERNET + REQUEST_INSTALL_PACKAGES for "Check for updates" only (ADR-020); no storage (SAF only)
     src/main/kotlin/org/veskra/dev/
       VeskraApplication.kt, MainActivity.kt
       engine/EngineHost.kt       single HandlerThread "veskra-engine" owning the EngineSession
@@ -98,8 +98,9 @@ apps/android/
   scan of `strings.xml`).
 * **Lifecycle** — `ON_PAUSE` → engine thread: `input.reset`, `document.autosave` into
   `filesDir/recovery`; committed strokes also autosave after 15 s. Gallery shows a recovery card.
-* **Privacy** — no `INTERNET` permission, no storage permissions, `allowBackup=false` and backup
-  rules excluding all data (no artwork upload).
+* **Privacy** — the network is used only when the user taps *Check for updates* (ADR-020:
+  `latest.json` and one APK from the website, verified, installed by the system installer); no
+  storage permissions, `allowBackup=false` and backup rules excluding all data (no artwork upload).
 
 ## Pinned versions (`gradle/libs.versions.toml`)
 

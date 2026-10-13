@@ -318,6 +318,14 @@ object VeskraIcons {
             moveTo(12f, 16.5f); curveTo(9.5f, 14.8f, 10.2f, 12.6f, 12f, 13.8f); curveTo(13.8f, 12.6f, 14.5f, 14.8f, 12f, 16.5f); close()
         }
     }
+    val Update: ImageVector by lazy {
+        // A circle with a download arrow: "get the new version".
+        icon("update") {
+            circle(12f, 12f, 9f)
+            moveTo(12f, 7f); lineTo(12f, 16f)
+            moveTo(8f, 12.5f); lineTo(12f, 16.5f); lineTo(16f, 12.5f)
+        }
+    }
     val Recover: ImageVector by lazy {
         icon("recover") {
             moveTo(20f, 12f); curveTo(20f, 16.4f, 16.4f, 20f, 12f, 20f); curveTo(7.6f, 20f, 4f, 16.4f, 4f, 12f)

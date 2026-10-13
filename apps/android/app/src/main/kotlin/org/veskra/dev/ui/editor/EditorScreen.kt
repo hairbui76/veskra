@@ -241,6 +241,11 @@ private fun MoreMenu(state: UiState, vm: VeskraViewModel) {
                 onClick = { open = false; vm.toggleRailSide() },
             )
             DropdownMenuItem(
+                text = { Text(stringResource(R.string.update_menu)) },
+                leadingIcon = { Icon(VeskraIcons.Update, contentDescription = null) },
+                onClick = { open = false; vm.checkForUpdate() },
+            )
+            DropdownMenuItem(
                 text = { Text(stringResource(R.string.letter_menu)) },
                 leadingIcon = { Icon(VeskraIcons.Letter, contentDescription = null) },
                 onClick = { open = false; letter = true },

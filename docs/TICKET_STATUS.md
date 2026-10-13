@@ -142,7 +142,7 @@ self-certifying gates.
 | **REL-05** Public source/documentation | ORCH + DSN | In Verification | partial | README quick start, CONTRIBUTING.md, COMMANDS/CONTRACTS/COMPATIBILITY docs | Supported-device list needs hardware data |
 | **REL-06** Reproducible test artifact bundle | QAP | Backlog | none | — | — |
 | **REL-07** Bug bash + severity triage | ORCH + QAP | Backlog | none | — | — |
-| **REL-08** Offline/privacy check | QAP | Blocked | partial | No network code in Rust; AndroidManifest declares no permissions (no INTERNET) | Android SDK host denied; :app never compiled (B-1); SEC-003 needs device |
+| **REL-08** Offline/privacy check | QAP | Blocked | partial | No network code in Rust; the only network use is the user-initiated update check (ADR-020: INTERNET + REQUEST_INSTALL_PACKAGES) | Android SDK host denied; :app never compiled (B-1); SEC-003 needs device |
 | **REL-09** Restore/recovery rehearsal | FMT + QAP | Backlog | none | — | — |
 | **REL-10** User beta and fixes | DSN + AND + ORCH | Backlog | none | — | — |
 | **REL-11** Tag and publish Veskra 1.0 | ORCH | Backlog | none | — | — |

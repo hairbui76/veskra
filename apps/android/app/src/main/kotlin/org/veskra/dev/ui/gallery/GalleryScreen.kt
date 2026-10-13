@@ -98,7 +98,18 @@ fun GalleryScreen(state: UiState, vm: VeskraViewModel) {
                     items(state.projects, key = { it.path }) { p -> ProjectCard(p, onOpen = { vm.openProject(p) }) }
                 }
             }
-            Text(stringResource(R.string.gallery_storage_note), style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.gallery_storage_note), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                Text(
+                    stringResource(R.string.update_gallery_version, vm.installedVersion),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = vm::checkForUpdate, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Icon(VeskraIcons.Update, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.update_menu), modifier = Modifier.padding(start = 6.dp))
+                }
+            }
         }
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter).safeDrawingPadding())
     }

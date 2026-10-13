@@ -2,6 +2,7 @@ package org.veskra.dev.ui
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
@@ -26,6 +27,8 @@ import org.veskra.dev.storage.AppPreferences
 import org.veskra.dev.storage.ProjectEntry
 import org.veskra.dev.storage.ProjectStore
 import org.veskra.dev.storage.RecoveryEntry
+import org.veskra.dev.update.AppUpdater
+import org.veskra.dev.update.UpdateState
 import org.veskra.kit.Affine
 import org.veskra.kit.Cmyk
 import org.veskra.kit.PrintColor
@@ -58,6 +61,7 @@ import org.veskra.kit.LayerKind
 import org.veskra.kit.Palette
 import org.veskra.kit.PointF
 import org.veskra.kit.RecentColors
+import org.veskra.kit.ReleaseInfo
 import org.veskra.kit.RectI
 import org.veskra.kit.SaveDestination
 import org.veskra.kit.SaveFailureReason
@@ -250,6 +254,8 @@ data class UiState(
     val mirrored: Boolean = false,
     val busy: Boolean = false,
     val message: UiMessage? = null,
+    /** The "Check for updates" dialog (ADR-020), or null when closed. */
+    val update: UpdateState? = null,
 ) {
     companion object {
         const val DEFAULT_DOC_NAME: String = "Untitled"
@@ -292,6 +298,12 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     val view: StateFlow<ViewState> = _view.asStateFlow()
 
     private var autosaveJob: Job? = null
+
+    private val updater = AppUpdater(app)
+    private var updateJob: Job? = null
+
+    /** The version this copy of Veskra reports (Gradle versionName). */
+    val installedVersion: String get() = updater.installedVersion
 
     init {
         display.historyListener = { committed -> onHistoryChanged(committed) }
@@ -1622,6 +1634,114 @@ class VeskraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeExport() = _ui.update { it.copy(sheet = null, export = null) }
+
+    // ---------------------------------------------------------------- in-app update (ADR-020)
+
+    /** "Check for updates": the only time Veskra goes online. */
+    fun checkForUpdate() {
+        updateJob?.cancel()
+        _ui.update { it.copy(update = UpdateState.Checking) }
+        updateJob = viewModelScope.launch {
+            val next = try {
+                val release = updater.check()
+                val apk = updater.apkFor(release)
+                when {
+                    !release.isNewerThan(installedVersion) -> UpdateState.UpToDate(installedVersion, release.version)
+                    apk == null -> UpdateState.Failed(UpdateState.Reason.NO_APK, null, release)
+                    else -> UpdateState.Available(installedVersion, release, apk)
+                }
+            } catch (e: AppUpdater.UpdateException) {
+                updateFailure(e)
+            }
+            if (_ui.value.update == UpdateState.Checking) _ui.update { it.copy(update = next) }
+        }
+    }
+
+    /** Downloads and verifies the APK offered by [UpdateState.Available]. */
+    fun downloadUpdate() {
+        val offer = _ui.value.update as? UpdateState.Available ?: return
+        updateJob?.cancel()
+        _ui.update { it.copy(update = UpdateState.Downloading(offer.release, offer.apk, 0f)) }
+        updateJob = viewModelScope.launch {
+            var shown = 0f
+            val next = try {
+                val file = updater.download(offer.apk) { p ->
+                    // ~1% steps are enough for a progress bar; the callback runs on the IO thread.
+                    if (p - shown >= 0.01f || p >= 1f) {
+                        shown = p
+                        _ui.update { s -> if (s.update is UpdateState.Downloading) s.copy(update = UpdateState.Downloading(offer.release, offer.apk, p)) else s }
+                    }
+                }
+                UpdateState.ReadyToInstall(offer.release, file.absolutePath, needsPermission = !updater.canInstall())
+            } catch (e: AppUpdater.UpdateException) {
+                updateFailure(e, offer.release)
+            }
+            if (_ui.value.update is UpdateState.Downloading) _ui.update { it.copy(update = next) }
+        }
+    }
+
+    /** Settings page for "Install unknown apps", when [UpdateState.ReadyToInstall.needsPermission]. */
+    fun installPermissionIntent(): Intent = updater.installPermissionIntent()
+
+    /** Back from Settings (or any resume): the permission may have been granted meanwhile. */
+    fun onResume() {
+        val ready = _ui.value.update as? UpdateState.ReadyToInstall ?: return
+        _ui.update { it.copy(update = ready.copy(needsPermission = !updater.canInstall())) }
+    }
+
+    /** Checkpoints the open drawing, then hands the verified APK to the system installer. */
+    fun installUpdate() {
+        val ready = _ui.value.update as? UpdateState.ReadyToInstall ?: return
+        if (!updater.canInstall()) {
+            _ui.update { it.copy(update = ready.copy(needsPermission = true)) }
+            return
+        }
+        _ui.update { it.copy(update = UpdateState.Installing(ready.release, ready.path)) }
+        updateJob = viewModelScope.launch {
+            // The update replaces the running app: keep a recovery copy of the open drawing first.
+            if (_ui.value.screen == Screen.EDITOR) autosaveNow(resetInput = true)
+            try {
+                updater.install(File(ready.path))
+            } catch (e: AppUpdater.UpdateException) {
+                _ui.update { it.copy(update = updateFailure(e, ready.release)) }
+            }
+        }
+    }
+
+    /** Result from the system installer (MainActivity). Success never arrives: the app is replaced. */
+    fun onInstallStatus(status: Int, message: String?) {
+        val installing = _ui.value.update as? UpdateState.Installing ?: return
+        val next = when {
+            status == PackageInstaller.STATUS_PENDING_USER_ACTION -> return // confirmation screen is up
+            status == PackageInstaller.STATUS_SUCCESS -> null
+            // Cancelled on the confirmation screen: offer the same file again.
+            status == PackageInstaller.STATUS_FAILURE_ABORTED ->
+                UpdateState.ReadyToInstall(installing.release, installing.path, needsPermission = !updater.canInstall())
+            AppUpdater.isConflict(status) -> UpdateState.Failed(UpdateState.Reason.SIGNATURE_CONFLICT, message, installing.release)
+            else -> UpdateState.Failed(UpdateState.Reason.INSTALL_FAILED, message, installing.release)
+        }
+        _ui.update { it.copy(update = next) }
+    }
+
+    fun dismissUpdate() {
+        val state = _ui.value.update
+        updateJob?.cancel()
+        updateJob = null
+        _ui.update { it.copy(update = null) }
+        if (state !is UpdateState.Installing) viewModelScope.launch(Dispatchers.IO) { updater.clearDownloads() }
+    }
+
+    private fun updateFailure(e: AppUpdater.UpdateException, release: ReleaseInfo? = null): UpdateState.Failed {
+        val reason = when (e.reason) {
+            AppUpdater.UpdateException.Reason.NETWORK -> UpdateState.Reason.NETWORK
+            AppUpdater.UpdateException.Reason.BAD_RESPONSE -> UpdateState.Reason.BAD_RESPONSE
+            AppUpdater.UpdateException.Reason.NO_APK -> UpdateState.Reason.NO_APK
+            AppUpdater.UpdateException.Reason.CHECKSUM -> UpdateState.Reason.CHECKSUM
+            AppUpdater.UpdateException.Reason.NOT_AN_UPDATE -> UpdateState.Reason.NOT_AN_UPDATE
+            AppUpdater.UpdateException.Reason.STORAGE -> UpdateState.Reason.STORAGE
+        }
+        return UpdateState.Failed(reason, e.message, release)
+    }
 
     companion object {
         private const val AUTOSAVE_DELAY_MS = 15_000L

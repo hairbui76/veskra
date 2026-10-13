@@ -75,6 +75,39 @@
     <string name="tool_tools">Tools</string>
     <string name="tool_more">More</string>
     <!-- A personal letter from the author; intentionally Vietnamese only. -->
+    <!-- In-app update (ADR-020) -->
+    <string name="update_menu">Check for updates</string>
+    <string name="update_gallery_version">Veskra %1$s</string>
+    <string name="update_title">Check for updates</string>
+    <string name="update_checking">Looking for a new version…</string>
+    <string name="update_latest_title">You have the latest version</string>
+    <string name="update_latest_body">Veskra %1$s is the newest release.</string>
+    <string name="update_available_title">Veskra %1$s is available</string>
+    <string name="update_available_body">You have %1$s. The download is %2$s MB.</string>
+    <string name="update_keeps_drawings">Your drawings and brushes stay on this tablet and are kept by the update.</string>
+    <string name="update_release_page">Release page</string>
+    <string name="update_download">Download and update</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading_title">Downloading %1$s</string>
+    <string name="update_downloading_body">%1$d%% of %2$s MB</string>
+    <string name="update_permission_title">Allow Veskra to install updates</string>
+    <string name="update_permission_body">Android needs your permission once. On the next screen turn on \"Allow from this source\", then come back to Veskra.</string>
+    <string name="update_open_settings">Open settings</string>
+    <string name="update_ready_title">Update to %1$s</string>
+    <string name="update_ready_body">Downloaded and verified. Android will ask you to confirm; Veskra then closes, and the new version opens from the app icon. An open drawing is kept as a recovery copy.</string>
+    <string name="update_install">Install</string>
+    <string name="update_installing">Waiting for Android\'s installer…</string>
+    <string name="update_failed_title">Update did not finish</string>
+    <string name="update_retry">Try again</string>
+    <string name="update_error_network">Could not reach the Veskra website. Check the internet connection and try again.</string>
+    <string name="update_error_response">The website sent an unexpected answer. Try again later.</string>
+    <string name="update_error_no_apk">The new version has no file for this device.</string>
+    <string name="update_error_checksum">The download was damaged (it does not match its checksum), so it was deleted. Try again.</string>
+    <string name="update_error_not_update">The downloaded file is not a newer Veskra, so it was not installed.</string>
+    <string name="update_error_storage">The update could not be prepared. Free some space and try again.</string>
+    <string name="update_error_conflict">This copy of Veskra was signed with a different key (for example a developer build), so Android will not update it. Export your drawings, uninstall Veskra and install it from the website.</string>
+    <string name="update_error_install">Android could not install the update.</string>
+
     <string name="letter_menu" translatable="false">MP</string>
     <string name="letter_title" translatable="false">Just a letter...</string>
     <string name="letter_body" translatable="false">Tặng Minh Phương. Em đừng thức khuya quá nhìu, cần gì thì nói với tui. Chúc con đường em đi thuận buồm xuôi gió, lúc nào cũng có cầu vồng kế bên, chúc cho những cơn mưa luôn là những dòng nước mát làm em dễ chịu. Còn nếu có gì khó, gọi anh.</string>

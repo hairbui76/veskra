@@ -65,7 +65,7 @@
           </a>
           <a class="btn btn-white" href="#download" data-i18n="hero.other">Other builds</a>
         </div>
-        <p class="fine rise" style="--d:4" data-i18n="hero.fine">For most tablets and phones (arm64). Free · No account · No ads · No internet permission.</p>
+        <p class="fine rise" style="--d:4" data-i18n="hero.fine">For most tablets and phones (arm64). Free · No account · No ads · Your artwork never leaves the device.</p>
       </div>
 
       <div class="hero-art rise" style="--d:2">
@@ -132,7 +132,7 @@
         <article class="card" style="--bg:#6EC3A0">
           <span class="card-no">H</span>
           <h3 data-i18n="feat.private.t">Offline and private</h3>
-          <p data-i18n="feat.private.d">The app does not even ask for internet access. Your artwork stays on your device until you export it, with autosave and crash recovery.</p>
+          <p data-i18n="feat.private.d">Everything works offline. The app goes online only when you tap “Check for updates”, to fetch the new version from this site. Your artwork stays on your device until you export it, with autosave and crash recovery.</p>
         </article>
         <article class="card" style="--bg:#F07882">
           <span class="card-no">I</span>
@@ -287,11 +287,14 @@
       </div>
 
       <div class="install">
-        <ol>
-          <li data-i18n="dl.step1">Download the APK on your tablet.</li>
-          <li data-i18n="dl.step2">Open it and allow “Install unknown apps” for your browser or file manager when Android asks.</li>
-          <li data-i18n="dl.step3">Open Veskra and start a new canvas.</li>
-        </ol>
+        <div>
+          <ol>
+            <li data-i18n="dl.step1">Download the APK on your tablet.</li>
+            <li data-i18n="dl.step2">Open it and allow “Install unknown apps” for your browser or file manager when Android asks.</li>
+            <li data-i18n="dl.step3">Open Veskra and start a new canvas.</li>
+          </ol>
+          <p class="small update-note" data-i18n="dl.update">Already on 0.1.0-alpha.5 or newer? Tap ⋯ → Check for updates (or the button under the gallery): Veskra downloads the new version, checks it and asks Android to install it over the old one, keeping your drawings.</p>
+        </div>
         <p class="small">
           <span data-i18n="dl.checks">Verify your download:</span>
           <a data-release-asset="sums" href="download/SHA256SUMS.txt" download>SHA256SUMS.txt</a> ·

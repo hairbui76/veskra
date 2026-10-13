@@ -30,6 +30,7 @@ fun VeskraApp(vm: VeskraViewModel) {
             else -> EditorScreen(state, vm)
         }
     }
+    state.update?.let { UpdateDialog(it, vm) }
     state.message?.let { msg ->
         AlertDialog(
             onDismissRequest = vm::dismissMessage,
