@@ -1,6 +1,6 @@
 # ADR-019: Brush system v2 — schema-3 presets, brush assets, library, Infinite Painter import
 Status: Accepted (provisional)
-Date: 2026-10-12
+Date: 2026-10-12 (amendment 1: 2026-10-13, see the end)
 Owner: BRH (with FMT for the container, ORCH for the command contract)
 Related: ADR-004 (brush core), ADR-009 (native container), ADR-016 (core contracts), ADR-017 (tool set)
 Amends: ADR-004 (adds image tips, textures, jitter, dynamics, wet edges), ADR-009 (container schema 2)
@@ -107,3 +107,72 @@ brush.
 
 ## Review
 Lead (brush system v2 brief, 2026-10-12). ORCH sign-off pending.
+
+## Amendment 1 (2026-10-13): second wave of built-in brushes, tip preview
+Context: the owner wants many more brushes to choose from, the APK must stay small, and the
+picker shows each brush's tip image plus a stroke sample.
+
+Decision:
+1. **40 new original built-ins** (70 in total), listed with ids, names, categories and sizes in
+   `docs/COMMANDS.md` "Built-in brushes": pencils (colored, charcoal pencil, graphite stick), ink
+   (ballpoint), calligraphy (dip pen, brush marker, flat nib, sumi-e), marker (highlighter), paint
+   (impasto, fan), watercolor (round, wet wash, granulating wash, dry brush, bleeding edge, salt),
+   airbrush (grainy), texture (conté), nature (grass, foliage, falling leaves, flowers, twigs, fur,
+   hair strands), effect (sparkles, bokeh, glow, light rays, fog, rain, snow, ink splatter) and
+   pattern (halftone, stipple, cross-hatch, scales, honeycomb, clouds). They use only schema-3
+   features the engine already rendered — no rasterizer change — so the 30 first-wave presets,
+   their eight assets and every existing stroke render exactly as before (`legacy_regression`
+   and the 30 first-wave goldens pass unchanged; re-blessing rewrote those 30 PNGs byte for byte).
+   Display order groups families; the first wave keeps its relative order and the erasers stay
+   last. Ids are prefixed by category and stable.
+2. **Four categories** `watercolor`, `calligraphy`, `nature`, `pattern` (serde snake_case). A
+   build that predates them loads them as `custom` (`#[serde(other)]`), as any unknown value.
+3. **Vector rule**: `watercolor`, `nature` and `pattern` join the textural categories that are
+   never vector-eligible; `calligraphy` is judged by the brush's features. Only
+   `calligraphy.brush_marker` (circular hard tip, pressure-driven size, stroke opacity 0.88) is
+   eligible among the new brushes.
+4. **29 new procedural assets** (37 in total): 22 tips and 7 tileable textures, generated in
+   `crates/veskra-brush/src/procedural/wave2.rs` with integer hashing and IEEE `+ − × ÷`, `sqrt`,
+   `floor` only; angles use a fixed Taylor polynomial (`sin_cos`) instead of the platform libm.
+   All 37 content hashes are pinned in `tests/fixtures/brushes/builtin_asset_hashes.txt`, so a
+   platform whose arithmetic differed would fail `builtin_asset_hashes_are_pinned`. Nothing is
+   copied or traced from any app or brush pack; no image files ship in the APK.
+5. **`brush.tip_preview`** `{id, size? 16..=512 = 128, color? #RRGGBB = #111111}` →
+   `{png, width, height}`: one dab of the tip at its default angle and roundness, scaled to fill
+   the square, with a `follow` texture applied (fixed paper textures, flow, opacity, dynamics,
+   jitter and wet edges are not shown); straight-alpha sRGB RGBA PNG, RGB = `color`. Rendered by
+   `veskra_brush::render_tip` with the stroke dab rasterizer and encoded with the `png` crate's
+   fast deflate (the export writer's adaptive filtering + strong compression cost ~1.5 ms per
+   128-px tip, ~10× more). Contract: `docs/COMMANDS.md` "Tip preview".
+6. `builtin_presets()` / `builtin_preset(id)` build the table once per process (identical
+   values; a lookup no longer rebuilds all presets).
+
+Evidence (Windows desktop host, release; run on 2026-10-13):
+* Stripped `libveskra_ffi.so`, `aarch64-linux-android` (NDK 28.2 clang linker, `llvm-strip
+  --strip-unneeded`): 12 124 456 B before, 12 246 840 B after (+122 384 B ≈ +119.5 KiB; target
+  < +500 KB).
+* `brush.tip_preview` for all 70 built-ins at 128 px: ≈ 15 ms in total on a quiet machine,
+  ≈ 40–50 ms when the host was loaded (same code; was ≈ 115 ms quiet with the export PNG writer).
+  70 `brush.preview` stroke samples at 320 × 80 for comparison: ≈ 265 ms quiet, ≈ 700 ms loaded.
+* One-time built-in asset + preset construction (first `Session` of a process): ≈ 70 ms vs
+  ≈ 28 ms before the change, measured interleaved under the same host load; ≈ 30 ms for the 37
+  assets on a quiet machine (generation ≈ 13 ms, the rest is hashing, mip pyramids and the
+  eager PNG carriers). The Android app creates sessions on its engine thread, not the UI thread.
+* Tests: `crates/veskra-brush/tests/builtin_wave2.rs` (pinned hashes; every new brush
+  deterministic and batching-independent with hardware pressure and with the no-pressure
+  fallback; seed dependence where jittered; all built-in strokes mutually distinct by ≥ 6 alpha
+  levels mean over the painted area; categories), 40 new goldens
+  `tests/fixtures/goldens/brush_<id>.png`, `src/tip.rs` unit tests, `src/procedural/wave2.rs`
+  (polynomial accuracy, seamless tiles), `crates/veskra-engine/tests/brush_library.rs`
+  (`tip_preview_contract`, custom / imported / follow-texture cases).
+
+Not done / caveats:
+* The look of the new brushes was reviewed only on host-rendered contact sheets (mouse-like and
+  synthetic-pressure strokes), not on a device with a stylus; tilt / velocity feel is unreviewed.
+* PNG carriers of built-in assets are still encoded eagerly at startup; encoding them lazily
+  (only when a `.vbrush` is exported or a stroke embeds them) would remove most of the extra
+  startup time but touches `BrushAsset`'s equality and accessor contract, so it is left for a
+  follow-up.
+* A user brush saved before this amendment with one of the new built-in ids (only possible via
+  an imported `.vbrush` that kept such an id) is now skipped at `brush.library.open` like any
+  built-in-id file, with a warning.
