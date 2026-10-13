@@ -658,6 +658,16 @@ pub enum Command {
     /// Base64 PNG thumbnail of a standard stroke (synthetic pressure, never stored).
     #[serde(rename = "brush.preview")]
     BrushPreview { id: String, width: u32, height: u32 },
+    /// Base64 PNG of the brush tip: one dab at the default angle and roundness, filling a square
+    /// (ADR-019 amendment 1). `size` 16..=512 (default 128), `color` `#RRGGBB` (default `#111111`).
+    #[serde(rename = "brush.tip_preview")]
+    BrushTipPreview {
+        id: String,
+        #[serde(default)]
+        size: Option<u32>,
+        #[serde(default)]
+        color: Option<String>,
+    },
     /// Convert a PNG into a brush asset stored in the library; returns its content hash.
     #[serde(rename = "brush.asset.add")]
     BrushAssetAdd {

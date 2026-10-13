@@ -16,6 +16,22 @@ use veskra_raster::{Tile, TileGrid};
 pub const MAX_PREVIEW_WIDTH: u32 = 1024;
 pub const MAX_PREVIEW_HEIGHT: u32 = 256;
 pub const MIN_PREVIEW_EDGE: u32 = 16;
+/// `brush.tip_preview` side bounds and default (px).
+pub const MIN_TIP_PREVIEW: u32 = 16;
+pub const MAX_TIP_PREVIEW: u32 = 512;
+pub const DEFAULT_TIP_PREVIEW: u32 = 128;
+/// `brush.tip_preview` default color (`#111111`).
+pub const DEFAULT_TIP_COLOR: [u8; 3] = [0x11, 0x11, 0x11];
+
+/// Strict `#RRGGBB` (either case); anything else is `None`.
+fn parse_rgb_hex(s: &str) -> Option<[u8; 3]> {
+    let h = s.strip_prefix('#')?;
+    if h.len() != 6 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some([byte(0)?, byte(2)?, byte(4)?])
+}
 
 /// One `brush.list` entry.
 pub(super) fn list_entry(p: &BrushPreset, current: bool) -> Value {
@@ -149,11 +165,7 @@ impl Session {
                 "preview size must be {MIN_PREVIEW_EDGE}..={MAX_PREVIEW_WIDTH} × {MIN_PREVIEW_EDGE}..={MAX_PREVIEW_HEIGHT}"
             )));
         }
-        let p = self
-            .library
-            .get(id)
-            .or_else(|| (self.brush.id == id).then(|| self.brush.clone()))
-            .ok_or_else(|| VeskraError::new(ErrorCode::NotFound, format!("unknown brush preset {id}")))?;
+        let p = self.preview_preset(id)?;
         let clip = RectI::from_size(width, height);
         let size = p.size_px.min(height as f32 * 0.45).max(1.0);
         let mut base = TileGrid::new();
@@ -179,5 +191,35 @@ impl Session {
         let png = veskra_io::png::encode_rgba8_srgb(width, height, &rgba)?;
         Ok(self.receipt(json!({"png": base64(&png), "width": width, "height": height, "sizePx": size,
                                "synthetic": true})))
+    }
+
+    /// The brush a preview command refers to: built-in or library brush, or the session's
+    /// current brush (which may have been deleted from the library meanwhile).
+    fn preview_preset(&self, id: &str) -> EResult<BrushPreset> {
+        self.library
+            .get(id)
+            .or_else(|| (self.brush.id == id).then(|| self.brush.clone()))
+            .ok_or_else(|| VeskraError::new(ErrorCode::NotFound, format!("unknown brush preset {id}")))
+    }
+
+    /// `brush.tip_preview`: the footprint of one dab (`veskra_brush::render_tip`: tip at its
+    /// default angle and roundness, `follow` texture applied, fixed paper texture / flow /
+    /// opacity / dynamics / jitter not) filling a `size` square, as a base64 sRGB PNG with
+    /// straight alpha: RGB = `color`, A = coverage, fully transparent pixels `0,0,0,0`.
+    pub(super) fn brush_tip_preview(&self, id: &str, size: Option<u32>, color: Option<&str>) -> EResult<Receipt> {
+        let size = size.unwrap_or(DEFAULT_TIP_PREVIEW);
+        if !(MIN_TIP_PREVIEW..=MAX_TIP_PREVIEW).contains(&size) {
+            return Err(VeskraError::invalid(format!(
+                "tip preview size must be {MIN_TIP_PREVIEW}..={MAX_TIP_PREVIEW}"
+            )));
+        }
+        let rgb = match color {
+            None => DEFAULT_TIP_COLOR,
+            Some(c) => parse_rgb_hex(c).ok_or_else(|| VeskraError::invalid("color must be #RRGGBB"))?,
+        };
+        let p = self.preview_preset(id)?;
+        let tip = veskra_brush::render_tip(&p, &self.library.resolve(&p), size).map_err(VeskraError::from)?;
+        let png = tip.png(rgb).map_err(VeskraError::from)?;
+        Ok(self.receipt(json!({"png": base64(&png), "width": size, "height": size})))
     }
 }

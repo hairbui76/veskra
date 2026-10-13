@@ -827,6 +827,7 @@ impl Session {
             Command::BrushImport { path } => self.brush_import(&path),
             Command::BrushExport { id, path } => self.brush_export(&id, &path),
             Command::BrushPreview { id, width, height } => self.brush_preview(&id, width, height),
+            Command::BrushTipPreview { id, size, color } => self.brush_tip_preview(&id, size, color.as_deref()),
             Command::BrushAssetAdd { path, channel, invert } => self.brush_asset_add(&path, channel, invert),
         }
     }
