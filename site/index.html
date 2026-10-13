@@ -31,6 +31,7 @@
     </a>
     <nav class="nav-links" aria-label="Main">
       <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#tour" data-i18n="nav.tour">Tour</a>
       <a href="#color" data-i18n="nav.color">Color</a>
       <a href="#download" data-i18n="nav.download">Download</a>
       <a href="https://github.com/hairbui76/veskra" rel="noopener">GitHub</a>
@@ -69,11 +70,11 @@
 
       <div class="hero-art rise" style="--d:2">
         <figure class="device">
-          <img src="assets/screen-editor.webp" width="1600" height="973" alt="Veskra editor on an Android tablet: a sky gradient with an orange sun over green ground, floating controls at the corners and a dock at the bottom." data-i18n-alt="hero.alt">
+          <img src="assets/screen-editor.webp" width="1600" height="973" alt="Veskra editor on an Android tablet: a meadow painted with the grass, flower and airbrush brushes under a blue sky and a yellow sun, with floating controls at the corners and a dock at the bottom." data-i18n-alt="hero.alt">
         </figure>
-        <span class="chip chip-1" style="--c:#1E50B4"><i></i><code>#1E50B4</code></span>
-        <span class="chip chip-2" style="--c:#FF6E2D"><i></i><code>#FF6E2D</code></span>
-        <span class="chip chip-3" style="--c:#1E6E23"><i></i><code>#1E6E23</code></span>
+        <span class="chip chip-1" style="--c:#3CA0D2"><i></i><code>#3CA0D2</code></span>
+        <span class="chip chip-2" style="--c:#FFD95A"><i></i><code>#FFD95A</code></span>
+        <span class="chip chip-3" style="--c:#4E9A3A"><i></i><code>#4E9A3A</code></span>
         <span class="sticker" aria-hidden="true" data-i18n="hero.sticker">made in Rust</span>
       </div>
     </section>
@@ -81,8 +82,8 @@
     <!-- MARQUEE -->
     <div class="marquee-wrap" aria-hidden="true"><div class="marquee">
       <div class="marquee-track">
-        <span>Brush</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span>
-        <span>Brush</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span>
+        <span>Brushes</span><span>Watercolor</span><span>Nature</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span><span>CMYK</span>
+        <span>Brushes</span><span>Watercolor</span><span>Nature</span><span>Smudge</span><span>Eraser</span><span>Fill</span><span>Gradient</span><span>Text</span><span>Lines</span><span>Ellipse</span><span>Lazy</span><span>Shapes</span><span>Symmetry</span><span>Lasso</span><span>Wand</span><span>Transform</span><span>Distort</span><span>Curves</span><span>Crop</span><span>Layers</span><span>Masks</span><span>PSD</span><span>SVG</span><span>PDF</span><span>CMYK</span>
       </div>
     </div></div>
 
@@ -141,26 +142,93 @@
       </div>
     </section>
 
-    <!-- SCREENS -->
-    <section class="section screens" aria-labelledby="screens-title">
+    <!-- TOUR -->
+    <section class="section tour" id="tour" aria-labelledby="tour-title">
       <header class="section-head">
         <p class="kicker" data-i18n="shots.kicker">02 — A look around</p>
-        <h2 id="screens-title" data-i18n="shots.title">Real screenshots, no mockups.</h2>
+        <h2 id="tour-title" data-i18n="shots.title">Every tool, real screenshots.</h2>
+        <p class="section-lede" data-i18n="shots.lede">Painted and captured in the app itself on an Android tablet emulator, nothing mocked up. Tap a picture to see it full size.</p>
       </header>
+      <div class="tour-tabs" role="group" aria-label="Filter screenshots" data-i18n-label="shots.filter">
+        <button type="button" data-filter="all" aria-pressed="true" data-i18n="shots.tab.all">All</button>
+        <button type="button" data-filter="brushes" aria-pressed="false" data-i18n="shots.tab.brushes">Brushes</button>
+        <button type="button" data-filter="draw" aria-pressed="false" data-i18n="shots.tab.draw">Draw</button>
+        <button type="button" data-filter="edit" aria-pressed="false" data-i18n="shots.tab.edit">Edit</button>
+        <button type="button" data-filter="layers" aria-pressed="false" data-i18n="shots.tab.layers">Layers</button>
+        <button type="button" data-filter="color" aria-pressed="false" data-i18n="shots.tab.color">Color</button>
+        <button type="button" data-filter="export" aria-pressed="false" data-i18n="shots.tab.export">Export</button>
+      </div>
       <div class="shots">
-        <figure class="shot" style="--r:-1.5deg">
-          <a href="assets/screen-color.webp" target="_blank" rel="noopener"><img src="assets/screen-color.webp" width="1600" height="973" loading="lazy" alt="The color panel with a hue ring, a saturation and brightness square and a row of palette swatches." data-i18n-alt="shots.color.alt"></a>
-          <figcaption data-i18n="shots.color">Color wheel + palettes</figcaption>
+        <figure class="shot" data-group="brushes">
+          <a href="assets/screen-brushes.webp" target="_blank" rel="noopener"><img src="assets/thumb-brushes.webp" width="800" height="487" loading="lazy" alt="The brush picker on the Nature tab: grass, foliage, falling leaves, flowers, twigs and fur, each with its tip image and a green sample stroke." data-i18n-alt="shots.brushes.alt"></a>
+          <figcaption><b data-i18n="shots.brushes.t">Brush picker</b> <span data-i18n="shots.brushes.d">70 brushes in 11 groups. Each card shows the tip and a stroke in your current color.</span></figcaption>
         </figure>
-        <figure class="shot" style="--r:1deg">
-          <a href="assets/screen-tools.webp" target="_blank" rel="noopener"><img src="assets/screen-tools.webp" width="1600" height="973" loading="lazy" alt="The tools panel, Create tab: fill, gradient, text, image, eyedropper, rulers, shapes and symmetry." data-i18n-alt="shots.tools.alt"></a>
-          <figcaption data-i18n="shots.tools">Tools, Create tab</figcaption>
+        <figure class="shot" data-group="brushes">
+          <a href="assets/screen-brushes-wc.webp" target="_blank" rel="noopener"><img src="assets/thumb-brushes-wc.webp" width="800" height="487" loading="lazy" alt="The brush picker on the Watercolor tab with six watercolor brushes in blue, and the brush size slider below." data-i18n-alt="shots.brushes_wc.alt"></a>
+          <figcaption><b data-i18n="shots.brushes_wc.t">Watercolor brushes</b> <span data-i18n="shots.brushes_wc.d">Round, wet wash, granulating wash, dry brush, bleeding edge and salt texture.</span></figcaption>
         </figure>
-        <figure class="shot" style="--r:-0.5deg">
-          <a href="assets/screen-export.webp" target="_blank" rel="noopener"><img src="assets/screen-export.webp" width="1600" height="973" loading="lazy" alt="Export for Photoshop with Display P3 and 16-bit selected; the summary says pixels are converted from sRGB with relative colorimetric intent and the profile is embedded." data-i18n-alt="shots.export.alt"></a>
-          <figcaption data-i18n="shots.export">Export: Display P3, 16-bit</figcaption>
+        <figure class="shot" data-group="brushes">
+          <a href="assets/screen-brush-editor.webp" target="_blank" rel="noopener"><img src="assets/thumb-brush-editor.webp" width="800" height="487" loading="lazy" alt="The brush editor on the Dynamics tab: a preview stroke, pressure, tilt and speed inputs, and the size range with its response curve." data-i18n-alt="shots.brush_editor.alt"></a>
+          <figcaption><b data-i18n="shots.brush_editor.t">Brush editor</b> <span data-i18n="shots.brush_editor.d">Tip, stroke, pressure / tilt / speed curves, paper texture and jitter, with a live preview stroke.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="draw">
+          <a href="assets/screen-tools-create.webp" target="_blank" rel="noopener"><img src="assets/thumb-tools-create.webp" width="800" height="487" loading="lazy" alt="The tools panel, Create tab, over a meadow painting: fill, gradient, text, image, eyedropper, guides, shapes and symmetry." data-i18n-alt="shots.tools_create.alt"></a>
+          <figcaption><b data-i18n="shots.tools_create.t">Create tools</b> <span data-i18n="shots.tools_create.d">Fill, gradient, text, image, eyedropper, line / ellipse / lazy guides, shapes, paths and symmetry.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="draw">
+          <a href="assets/screen-symmetry.webp" target="_blank" rel="noopener"><img src="assets/thumb-symmetry.webp" width="800" height="487" loading="lazy" alt="A mandala in purple, red and gold drawn with radial symmetry; blue guide lines divide the square canvas into six slices." data-i18n-alt="shots.symmetry.alt"></a>
+          <figcaption><b data-i18n="shots.symmetry.t">Radial symmetry</b> <span data-i18n="shots.symmetry.d">Draw in one slice, get the whole mandala. Vertical and horizontal mirrors too.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="edit">
+          <a href="assets/screen-tools-edit.webp" target="_blank" rel="noopener"><img src="assets/thumb-tools-edit.webp" width="800" height="487" loading="lazy" alt="The tools panel, Edit tab: lasso, rectangle, circle and wand selection, basic transform and distort, color and curve adjustments, crop and resize." data-i18n-alt="shots.tools_edit.alt"></a>
+          <figcaption><b data-i18n="shots.tools_edit.t">Edit tools</b> <span data-i18n="shots.tools_edit.d">Lasso, rectangle, circle and wand selections, transform, distort, color adjust, curves, crop and resize.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="edit">
+          <a href="assets/screen-transform.webp" target="_blank" rel="noopener"><img src="assets/thumb-transform.webp" width="800" height="487" loading="lazy" alt="The sun selected with the circle selection and being moved and scaled with transform handles." data-i18n-alt="shots.transform.alt"></a>
+          <figcaption><b data-i18n="shots.transform.t">Transform a selection</b> <span data-i18n="shots.transform.d">Select the sun, drag to move it, pull a corner to scale, the top handle to rotate.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="edit">
+          <a href="assets/screen-curves.webp" target="_blank" rel="noopener"><img src="assets/thumb-curves.webp" width="800" height="487" loading="lazy" alt="The curves panel with an S-shaped RGB curve; the hills behind it already show the stronger contrast." data-i18n-alt="shots.curves.alt"></a>
+          <figcaption><b data-i18n="shots.curves.t">Curves</b> <span data-i18n="shots.curves.d">RGB or per-channel curves, previewed live on the layer.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="layers">
+          <a href="assets/screen-layers.webp" target="_blank" rel="noopener"><img src="assets/thumb-layers.webp" width="800" height="487" loading="lazy" alt="The layers panel: Sky details, Meadow, Hills and Sky layers, with opacity, blend modes, lock transparency and clip to layer below." data-i18n-alt="shots.layers.alt"></a>
+          <figcaption><b data-i18n="shots.layers.t">Layers</b> <span data-i18n="shots.layers.d">Blend modes, opacity, lock transparency, clipping, masks from a selection; raster and vector layers.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="color">
+          <a href="assets/screen-color-wheel.webp" target="_blank" rel="noopener"><img src="assets/thumb-color-wheel.webp" width="800" height="487" loading="lazy" alt="The color panel with a hue ring, a saturation and brightness square and the Basics palette." data-i18n-alt="shots.color_wheel.alt"></a>
+          <figcaption><b data-i18n="shots.color_wheel.t">Color wheel</b> <span data-i18n="shots.color_wheel.d">Hue ring, saturation / brightness square and palettes one tap away.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="color">
+          <a href="assets/screen-color-cmyk.webp" target="_blank" rel="noopener"><img src="assets/thumb-color-cmyk.webp" width="800" height="487" loading="lazy" alt="The CMYK sliders for a bright orange, with a warning that it cannot be printed exactly with the FOGRA39 profile, and the total ink." data-i18n-alt="shots.color_cmyk.alt"></a>
+          <figcaption><b data-i18n="shots.color_cmyk.t">CMYK sliders</b> <span data-i18n="shots.color_cmyk.d">Ink values through the print profile, with a warning when a color cannot be printed exactly.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="color">
+          <a href="assets/screen-color-sphere.webp" target="_blank" rel="noopener"><img src="assets/thumb-color-sphere.webp" width="800" height="487" loading="lazy" alt="The tone sphere: an orange ball lit from the top left, with hue, shade and tint sliders." data-i18n-alt="shots.color_sphere.alt"></a>
+          <figcaption><b data-i18n="shots.color_sphere.t">Tone sphere</b> <span data-i18n="shots.color_sphere.d">Pick the shade, tone and tint of a hue on a lit sphere.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="color">
+          <a href="assets/screen-color-swatches.webp" target="_blank" rel="noopener"><img src="assets/thumb-color-swatches.webp" width="800" height="487" loading="lazy" alt="The swatches tab with the recent colors of the meadow painting and the Basics palette." data-i18n-alt="shots.color_swatches.alt"></a>
+          <figcaption><b data-i18n="shots.color_swatches.t">Swatches</b> <span data-i18n="shots.color_swatches.d">Recent colors, built-in palettes including skin tones, and your own.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="export">
+          <a href="assets/screen-export-p3.webp" target="_blank" rel="noopener"><img src="assets/thumb-export-p3.webp" width="800" height="487" loading="lazy" alt="Export for Photoshop with Display P3 and 16-bit selected; the summary says pixels are converted from sRGB with relative colorimetric intent and the profile is embedded." data-i18n-alt="shots.export_p3.alt"></a>
+          <figcaption><b data-i18n="shots.export_p3.t">Export for Photoshop</b> <span data-i18n="shots.export_p3.d">Display P3, 16-bit, profile embedded. The summary says what gets converted.</span></figcaption>
+        </figure>
+        <figure class="shot" data-group="export">
+          <a href="assets/screen-export-cmyk.webp" target="_blank" rel="noopener"><img src="assets/thumb-export-cmyk.webp" width="800" height="487" loading="lazy" alt="Export for Photoshop in CMYK: the built-in FOGRA39 print profile, a button to use the printer's own profile, clip or compress for out-of-gamut colors, and black point compensation." data-i18n-alt="shots.export_cmyk.alt"></a>
+          <figcaption><b data-i18n="shots.export_cmyk.t">Export for print</b> <span data-i18n="shots.export_cmyk.d">CMYK PSD / PDF through FOGRA39 or your printer's .icc, with intent and black point compensation.</span></figcaption>
         </figure>
       </div>
+      <dialog class="lightbox" aria-labelledby="lightbox-title">
+        <img src="" alt="" width="1600" height="973">
+        <div class="lightbox-bar">
+          <button type="button" class="lb-prev" aria-label="Previous screenshot" data-i18n-label="shots.prev">&larr;</button>
+          <p id="lightbox-title"></p>
+          <button type="button" class="lb-next" aria-label="Next screenshot" data-i18n-label="shots.next">&rarr;</button>
+          <button type="button" class="lb-close" aria-label="Close" data-i18n-label="shots.close">&times;</button>
+        </div>
+      </dialog>
     </section>
 
     <!-- COLOR -->
