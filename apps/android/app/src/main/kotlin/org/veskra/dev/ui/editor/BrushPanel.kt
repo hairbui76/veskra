@@ -148,7 +148,8 @@ fun BrushPanel(state: UiState, vm: VeskraViewModel, modifier: Modifier = Modifie
                 }
             }
             if (groups.size > 1) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Wrapping, not scrolling: every category stays visible (a scrolled-off tab is easy to miss).
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     groups.keys.forEach { g ->
                         val label = if (g.startsWith("imported:")) {
                             g.removePrefix("imported:").ifBlank { stringResource(R.string.brush_category_imported) }
